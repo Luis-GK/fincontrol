@@ -2750,8 +2750,9 @@ renderDashboard();
 const savedName     = localStorage.getItem('fc_user_name');
 const savedInitials = localStorage.getItem('fc_user_initials');
 if (savedName) {
+  const initials = savedInitials || savedName.split(' ').map(p=>p[0]).join('').toUpperCase().slice(0,2) || '?';
   document.getElementById('user-name-text').textContent = savedName;
-  document.getElementById('user-avatar-initials').textContent = savedInitials || savedName[0].toUpperCase();
+  document.getElementById('user-avatar-initials').textContent = initials;
   document.getElementById('user-chip').style.display = 'flex';
 }
 
