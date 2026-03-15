@@ -2819,29 +2819,47 @@ function calcGFPagadoEsteMes() {
 
 function renderGastosFijos() {
   if (!state.gfPagos) state.gfPagos = {};
-  const totalMes = calcGastosMensuales();
-  const nomina = state.debito.nomina || 0;
-  const pagadoYa = calcGFPagadoEsteMes();
+  const totalMes  = calcGastosMensuales();
+  const nomina    = state.debito.nomina || 0;
+  const pagadoYa  = calcGFPagadoEsteMes();
   const pendiente = totalMes - pagadoYa;
-  const libre = nomina - totalMes;
-  const libreReal = nomina - pagadoYa; // tras descontar solo lo ya pagado
+  const libreReal = nomina - pagadoYa;
+
+  // Calcular pagos de tarjeta de crédito en este ciclo
+  const cicloInicio = gfCicloActual();
+  const pagosTarjeta = state.movDebito
+    .filter(m => m.tipo === 'gasto' && m.fecha >= cicloInicio &&
+      (m.desc || '').toLowerCase().includes('pago tarjeta'))
+    .reduce((s, m) => s + m.monto, 0);
+
+  // Calcular movimientos a ahorro en este ciclo
+  const ahorroEsteMes = state.movDebito
+    .filter(m => m.tipo === 'gasto' && m.fecha >= cicloInicio &&
+      (m.desc || '').toLowerCase().includes('ahorro'))
+    .reduce((s, m) => s + m.monto, 0);
+
+  // Total comprometido real = gastos fijos + tarjetas + ahorro
+  const totalComprometido = totalMes + pagosTarjeta + ahorroEsteMes;
+  const libreTotal = nomina - pagadoYa - pagosTarjeta - ahorroEsteMes;
 
   // Resumen
   const resumen = document.getElementById('gf-resumen-content');
   if (!nomina) {
     resumen.innerHTML = '<div class="empty-state"><div class="empty-icon">◆</div><p>Configura tu nómina en Débito para ver el resumen</p></div>';
   } else {
-    const pct = Math.min(100, (totalMes/nomina)*100);
+    const pct       = Math.min(100, (totalComprometido/nomina)*100);
     const pctPagado = Math.min(100, (pagadoYa/nomina)*100);
-    const color = pct < 50 ? 'green' : pct < 80 ? 'yellow' : 'red';
+    const color     = pct < 50 ? 'green' : pct < 80 ? 'yellow' : 'red';
     resumen.innerHTML = `
       <div class="summary-row"><span class="label">Nómina mensual</span><span class="value" style="color:var(--green)">${fmt(nomina)}</span></div>
       <div class="summary-row"><span class="label">Gastos fijos totales / mes</span><span class="value" style="color:var(--red)">${fmt(totalMes)}</span></div>
-      <div class="summary-row"><span class="label">Ya pagado este mes</span><span class="value" style="color:var(--blue)">${fmt(pagadoYa)}</span></div>
+      <div class="summary-row"><span class="label">Ya pagado este ciclo</span><span class="value" style="color:var(--blue)">${fmt(pagadoYa)}</span></div>
       <div class="summary-row"><span class="label">Pendiente por pagar</span><span class="value" style="color:var(--yellow)">${fmt(pendiente)}</span></div>
+      ${pagosTarjeta > 0 ? `<div class="summary-row"><span class="label">Pagos a tarjeta de crédito</span><span class="value" style="color:var(--red)">${fmt(pagosTarjeta)}</span></div>` : ''}
+      ${ahorroEsteMes > 0 ? `<div class="summary-row"><span class="label">Transferido a ahorro</span><span class="value" style="color:var(--blue)">${fmt(ahorroEsteMes)}</span></div>` : ''}
       <div class="summary-row" style="border-top:2px solid var(--border);margin-top:4px;padding-top:12px">
-        <span class="label" style="font-weight:700">Libre (descontando solo lo pagado)</span>
-        <span class="value" style="color:${libreReal>=0?'var(--green)':'var(--red)'};font-size:16px">${fmt(libreReal)}</span>
+        <span class="label" style="font-weight:700">Libre (descontando todo)</span>
+        <span class="value" style="color:${libreTotal>=0?'var(--green)':'var(--red)'};font-size:16px">${fmt(libreTotal)}</span>
       </div>
       <div class="progress-wrap" style="margin-top:12px;height:8px;position:relative">
         <div class="progress-bar ${color}" style="width:${pct}%;opacity:0.3;position:absolute;top:0;left:0;height:100%"></div>
