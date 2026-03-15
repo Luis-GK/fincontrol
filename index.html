@@ -597,6 +597,17 @@
           <div class="card-value green" id="dash-ahorro">$0.00</div>
           <div class="card-sub">Suma de todas las metas</div>
         </div>
+        <div class="card" style="position:relative">
+          <div class="card-label" style="display:flex;align-items:center;justify-content:space-between">
+            <span id="dash-ahorro-sel-label">AHORRO</span>
+            <select id="dash-ahorro-selector" onchange="updateDashAhorroWidget()"
+              style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1px;padding:2px 4px;cursor:pointer;max-width:120px">
+              <option value="">— Elegir —</option>
+            </select>
+          </div>
+          <div class="card-value blue" id="dash-ahorro-sel-valor">—</div>
+          <div class="card-sub" id="dash-ahorro-sel-sub">Selecciona un ahorro</div>
+        </div>
       </div>
 
       <!-- Quick actions -->
@@ -1540,6 +1551,31 @@ function renderDashboard() {
   document.getElementById('dash-libre').textContent = fmt(Math.max(0, saldo - (gastosMes - pagadoGF)));
   if (document.getElementById('dash-ahorro')) document.getElementById('dash-ahorro').textContent = fmt(totalAhorro);
 
+  // Poblar selector de ahorro individual
+  const sel = document.getElementById('dash-ahorro-selector');
+  if (sel) {
+    const prevVal = sel.value;
+    sel.innerHTML = '<option value="">— Elegir —</option>';
+    (state.ahorrosLibres||[]).forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = 'libre_' + a.id;
+      opt.textContent = a.icono + ' ' + a.nombre;
+      sel.appendChild(opt);
+    });
+    (state.metas||[]).forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = 'meta_' + m.id;
+      opt.textContent = m.icono + ' ' + m.nombre;
+      sel.appendChild(opt);
+    });
+    // Restaurar selección previa si aún existe
+    if (prevVal && [...sel.options].some(o => o.value === prevVal)) sel.value = prevVal;
+    // Guardar preferencia en localStorage
+    const saved = localStorage.getItem('fc_dash_ahorro_sel');
+    if (!sel.value && saved && [...sel.options].some(o => o.value === saved)) sel.value = saved;
+    updateDashAhorroWidget();
+  }
+
   // Subtítulos dinámicos
   const subGastos = document.querySelector('#dash-gastos + .card-sub');
   if (subGastos) subGastos.textContent = pagadoGF > 0 ? `Pagado: ${fmt(pagadoGF)} · Pendiente` : 'Pendiente por pagar este mes';
@@ -1560,6 +1596,41 @@ function renderDashboard() {
       <td><span class="badge ${m.cuenta === 'debito' ? 'badge-blue' : 'badge-yellow'}">${m.cuenta}</span></td>
       <td class="${m.esIngreso ? 'card-value green' : 'card-value red'}" style="font-size:14px;font-weight:700">${m.esIngreso ? '+' : '-'}${fmt(m.monto)}</td>
     </tr>`).join('');
+}
+
+function updateDashAhorroWidget() {
+  const sel   = document.getElementById('dash-ahorro-selector');
+  const valor = document.getElementById('dash-ahorro-sel-valor');
+  const sub   = document.getElementById('dash-ahorro-sel-sub');
+  const label = document.getElementById('dash-ahorro-sel-label');
+  if (!sel || !valor) return;
+
+  const v = sel.value;
+  localStorage.setItem('fc_dash_ahorro_sel', v);
+
+  if (!v) {
+    valor.textContent = '—';
+    sub.textContent   = 'Selecciona un ahorro';
+    label.textContent = 'AHORRO';
+    return;
+  }
+
+  if (v.startsWith('libre_')) {
+    const id  = v.replace('libre_', '');
+    const acc = (state.ahorrosLibres||[]).find(a => a.id === id);
+    if (!acc) return;
+    valor.textContent = fmt(acc.saldo || 0);
+    label.textContent = (acc.icono + ' ' + acc.nombre).toUpperCase().slice(0, 18);
+    sub.textContent   = acc.desc || 'Ahorro libre';
+  } else {
+    const id   = v.replace('meta_', '');
+    const meta = (state.metas||[]).find(m => m.id === id);
+    if (!meta) return;
+    const pct  = Math.min(100, Math.round(((meta.saldo||0) / meta.objetivo) * 100));
+    valor.textContent = fmt(meta.saldo || 0);
+    label.textContent = (meta.icono + ' ' + meta.nombre).toUpperCase().slice(0, 18);
+    sub.textContent   = `${pct}% de ${fmt(meta.objetivo)}`;
+  }
 }
 
 // ══════════════════════════════════════
