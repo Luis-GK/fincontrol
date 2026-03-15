@@ -1927,8 +1927,26 @@ function agregarMovDebito() {
 function eliminarMovDebito(i) {
   const m = state.movDebito[i];
   state.debito.saldo = (state.debito.saldo || 0) - (m.tipo === 'deposito' ? m.monto : -m.monto);
+
+  // Si era depósito de nómina, recalcular nomina desde el historial restante
+  if (m.esNomina && m.tipo === 'deposito') {
+    state.lastNominaPrompt = null; // que el banner vuelva a aparecer
+    // Buscar el depósito de nómina más reciente que quede después de eliminar este
+    const anteriores = state.movDebito.filter((mv, idx) =>
+      idx !== i && mv.esNomina && mv.tipo === 'deposito'
+    );
+    if (anteriores.length > 0) {
+      // Usar el más reciente
+      const masReciente = anteriores.sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
+      state.debito.nomina = masReciente.monto;
+    } else {
+      state.debito.nomina = 0;
+    }
+  }
+
   state.movDebito.splice(i, 1);
-  saveState(); renderDebito(); renderDashboard();
+  guardadoInmediato();
+  renderDebito(); renderDashboard();
   toast('Movimiento eliminado');
 }
 
