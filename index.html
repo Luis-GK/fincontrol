@@ -1912,7 +1912,7 @@ function agregarMovDebito() {
   if (!monto || !desc) { toast('Completa todos los campos'); return; }
   state.movDebito.push({ tipo, monto, desc, fecha });
   state.debito.saldo = (state.debito.saldo || 0) + (tipo === 'deposito' ? monto : -monto);
-  saveState();
+  guardadoInmediato();
   document.getElementById('mov-debito-monto').value = '';
   document.getElementById('mov-debito-desc').value = '';
   renderDebito();
@@ -1943,8 +1943,8 @@ function agregarTarjeta() {
   const corte = parseInt(document.getElementById('tc-corte').value) || 0;
   const pago = parseInt(document.getElementById('tc-pago').value) || 0;
   if (!nombre || !limite) { toast('Completa nombre y límite'); return; }
-  state.tarjetas.push({ id: Date.now(), nombre, limite, corte, pago });
-  saveState();
+  state.tarjetas.push({ id: Date.now().toString(), nombre, limite, corte, pago });
+  guardadoInmediato();
   ['tc-nombre','tc-limite','tc-corte','tc-pago'].forEach(id => document.getElementById(id).value = '');
   renderCredito(); toast('Tarjeta agregada ✓');
 }
@@ -2023,23 +2023,22 @@ function renderCredito() {
 
 function agregarCargo() {
   const tarjetaId = document.getElementById('cargo-tarjeta').value;
-  const desc = document.getElementById('cargo-desc').value.trim();
+  const desc  = document.getElementById('cargo-desc').value.trim();
   const monto = parseFloat(document.getElementById('cargo-monto').value);
   const fecha = document.getElementById('cargo-fecha').value;
-  const tipo = document.getElementById('cargo-tipo').value;
+  const tipo  = document.getElementById('cargo-tipo').value;
   const meses = parseInt(document.getElementById('cargo-meses').value) || 1;
-  const tasa = parseFloat(document.getElementById('cargo-tasa').value) || 0;
+  const tasa  = parseFloat(document.getElementById('cargo-tasa').value) || 0;
   if (!tarjetaId || !desc || !monto) { toast('Completa todos los campos'); return; }
 
   let total = monto;
   if (tipo === 'mci') {
-    // Cálculo de intereses compuestos
     const cuota = monto * (tasa/100) / (1 - Math.pow(1 + tasa/100, -meses));
     total = cuota * meses;
   }
 
-  state.cargos.push({ id: Date.now(), tarjetaId, desc, monto, total: Math.round(total*100)/100, fecha, tipo, meses, tasa, pagado: 0 });
-  saveState();
+  state.cargos.push({ id: Date.now().toString(), tarjetaId, desc, monto, total: Math.round(total*100)/100, fecha, tipo, meses, tasa, pagado: 0 });
+  guardadoInmediato();
   ['cargo-desc','cargo-monto'].forEach(id => document.getElementById(id).value = '');
   renderCredito(); renderDashboard();
   toast('Cargo registrado ✓');
@@ -2203,7 +2202,7 @@ function registrarPagoTarjeta() {
   });
   state.debito.saldo = (state.debito.saldo || 0) - monto;
 
-  saveState();
+  guardadoInmediato();
   document.getElementById('pago-monto').value = '';
   document.getElementById('pago-resumen').style.display = 'none';
   renderCredito(); renderDashboard(); renderDebito();
@@ -2761,7 +2760,7 @@ function confirmarPagoGF(i) {
     fecha: today(), esNomina: false
   });
   state.debito.saldo = (state.debito.saldo || 0) - gf.monto;
-  saveState();
+  guardadoInmediato();
   renderGastosFijos(); renderDashboard(); renderDebito();
   toast(`${gf.nombre} pagado ✓`);
 }
@@ -2774,14 +2773,13 @@ function deshacerPagoGF(i) {
   const pagados = state.gfPagos[key] || 0;
   if (pagados <= 0) return;
   state.gfPagos[key] = pagados - 1;
-  // Revertir en débito: eliminar el último movimiento de este gasto
   const idx = [...state.movDebito].reverse().findIndex(m => m.desc === `Gasto fijo: ${gf.nombre}`);
   if (idx !== -1) {
     const realIdx = state.movDebito.length - 1 - idx;
     state.movDebito.splice(realIdx, 1);
     state.debito.saldo = (state.debito.saldo || 0) + gf.monto;
   }
-  saveState();
+  guardadoInmediato();
   renderGastosFijos(); renderDashboard(); renderDebito();
   toast(`Pago de ${gf.nombre} deshecho`);
 }
@@ -3082,10 +3080,17 @@ function confirmarNomina() {
   if (!monto || monto <= 0) { toast('Ingresa un monto válido'); return; }
   const fecha = today();
   state.movDebito.push({ tipo: 'deposito', monto, desc, fecha, esNomina: true });
-  state.debito.saldo  = (state.debito.saldo || 0) + monto;
-  state.debito.nomina = monto;
-  state.lastNominaPrompt = fecha;
-  saveState();
+  state.debito.saldo         = (state.debito.saldo || 0) + monto;
+  state.debito.nomina        = monto;
+  state.lastNominaPrompt     = fecha;
+  // Guardar en localStorage inmediatamente
+  localStorage.setItem('fincontrol_state', JSON.stringify(state));
+  // Forzar guardado en Sheets sin debounce
+  clearTimeout(_syncTimeout);
+  if (accessToken) {
+    _isSaving = false;
+    saveToSheet();
+  }
   document.getElementById('modal-nomina').classList.remove('open');
   document.getElementById('modal-nomina-monto').value = '';
   document.getElementById('modal-nomina-desc').value  = '';
@@ -3483,6 +3488,16 @@ async function sheetsRead(range) {
   return r.values || [];
 }
 
+// ── Guardado inmediato sin debounce — para acciones críticas
+function guardadoInmediato() {
+  localStorage.setItem('fincontrol_state', JSON.stringify(state));
+  if (!accessToken) return;
+  clearTimeout(_syncTimeout);
+  if (_isSaving) return;
+  _isSaving = true;
+  saveToSheet().finally(() => { _isSaving = false; });
+}
+
 // ══════════════════════════════════════
 // OVERRIDE saveState para también guardar en Sheets
 // ══════════════════════════════════════
@@ -3492,14 +3507,16 @@ let _isSaving = false;
 function saveState() {
   localStorage.setItem('fincontrol_state', JSON.stringify(state));
   if (!accessToken) return;
-  if (_isSaving) return; // ya hay un guardado en proceso, ignorar
+  // Siempre guardar en Sheets inmediatamente — sin debounce
+  // El debounce solo aplica para cambios de configuración (manejados por saveStateDebounced)
+  if (_isSaving) return;
   clearTimeout(_syncTimeout);
   _syncTimeout = setTimeout(async () => {
     if (_isSaving) return;
     _isSaving = true;
     await saveToSheet();
     _isSaving = false;
-  }, 3000); // esperar 3 segundos de inactividad antes de guardar
+  }, 800); // reducido de 3s a 0.8s
 }
 
 // ══════════════════════════════════════
