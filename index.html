@@ -2027,18 +2027,23 @@ function renderCredito() {
     const tc = state.tarjetas.find(t => t.id == c.tarjetaId);
     const tipoBadge = c.tipo === 'contado' ? 'badge-blue' : c.tipo === 'msi' ? 'badge-green' : 'badge-yellow';
     const tipoLabel = c.tipo === 'contado' ? 'Contado' : c.tipo === 'msi' ? `MSI ${c.meses}m` : `MCI ${c.meses}m`;
-    const restante = calcRestanteCargo(c);
-    const pagadoAuto = c.total - restante;
-    const cuota = (c.tipo === 'contado') ? c.total : Math.round((c.total / c.meses)*100)/100;
-    const mesesPagados = calcMesesTranscurridos(c);
-    const mesesRest = Math.max(0, c.meses - mesesPagados);
+    const restante      = calcRestanteCargo(c);
+    const cuota         = (c.tipo === 'contado') ? c.total : Math.round((c.total / c.meses)*100)/100;
+    const mesesPorFecha = calcMesesTranscurridos(c);
+    const mesesPorPago  = (c.tipo !== 'contado' && cuota > 0)
+      ? Math.floor((c.pagado || 0) / cuota)
+      : mesesPorFecha;
+    const mesesPagados  = Math.max(mesesPorFecha, mesesPorPago);
+    const mesesRest     = Math.max(0, c.meses - mesesPagados);
+    // Mostrar el pagado real (c.pagado) si es mayor al calculado por fecha
+    const pagadoMostrar = Math.max(cuota * mesesPagados, c.pagado || 0);
     return `<tr>
       <td>${c.fecha}</td>
       <td>${c.desc}</td>
       <td>${tc ? tc.nombre : '—'}</td>
       <td><span class="badge ${tipoBadge}">${tipoLabel}</span></td>
       <td style="font-family:'Space Mono',monospace;font-size:12px">${c.tipo==='contado'?'—':fmt(cuota)}</td>
-      <td style="color:var(--green);font-weight:700">${fmt(pagadoAuto)}</td>
+      <td style="color:var(--green);font-weight:700">${c.tipo==='contado'?fmt(c.pagado||0):fmt(pagadoMostrar)}</td>
       <td style="font-size:12px;color:var(--text2)">${c.tipo==='contado'?'—':`${mesesPagados}/${c.meses}`}</td>
       <td style="color:var(--red);font-weight:700">${fmt(restante)}</td>
       <td><button class="btn btn-danger btn-sm" onclick="eliminarCargo(${i})">✕</button></td>
@@ -2197,33 +2202,46 @@ function registrarPagoTarjeta() {
   if (!tarjetaId) { toast('Selecciona una tarjeta'); return; }
   if (!monto || monto <= 0) { toast('Ingresa un monto válido'); return; }
 
-  // Distribuir el pago entre los cargos pendientes (primero contado, luego MSI/MCI)
-  let restoPago = monto;
-  const cargosOrdenados = state.cargos
-    .filter(c => c.tarjetaId == tarjetaId && calcRestanteCargo(c) > 0)
-    .sort((a,b) => (a.tipo === 'contado' ? -1 : 1));
+  const cargosTarjeta = state.cargos.filter(c => c.tarjetaId == tarjetaId);
 
-  for (const cargo of cargosOrdenados) {
-    if (restoPago <= 0) break;
-    const restante = calcRestanteCargo(cargo);
-    const aplicar = Math.min(restoPago, restante);
-    cargo.pagado = (cargo.pagado || 0) + aplicar;
-    restoPago -= aplicar;
+  if (tipoPago === 'total' || tipoPago === 'minimo') {
+    // Pago total del periodo: avanzar exactamente 1 cuota en cada cargo MSI/MCI
+    // y liquidar todos los cargos de contado pendientes
+    cargosTarjeta.forEach(c => {
+      if (c.tipo === 'contado') {
+        // Liquidar contado completo
+        c.pagado = c.total;
+      } else {
+        // Avanzar 1 cuota en MSI/MCI
+        const cuota = Math.round((c.total / c.meses) * 100) / 100;
+        c.pagado = Math.min((c.pagado || 0) + cuota, c.total);
+      }
+    });
+  } else {
+    // Pago parcial: distribuir entre cargos (contado primero, luego MSI/MCI)
+    let restoPago = monto;
+    const cargosOrdenados = cargosTarjeta
+      .filter(c => calcRestanteCargo(c) > 0)
+      .sort((a,b) => (a.tipo === 'contado' ? -1 : 1));
+    for (const cargo of cargosOrdenados) {
+      if (restoPago <= 0) break;
+      const aplicar = Math.min(restoPago, calcRestanteCargo(cargo));
+      cargo.pagado = (cargo.pagado || 0) + aplicar;
+      restoPago -= aplicar;
+    }
   }
 
-  // Eliminar cargos de contado que ya quedaron liquidados
+  // Eliminar cargos de contado ya liquidados
   state.cargos = state.cargos.filter(c => {
     if (c.tipo !== 'contado') return true;
     return calcRestanteCargo(c) > 0;
   });
 
-  // Registrar también en movimientos de débito como salida
+  // Registrar en movimientos de débito
   state.movDebito.push({
-    tipo: 'gasto',
-    monto,
+    tipo: 'gasto', monto,
     desc: `Pago tarjeta ${state.tarjetas.find(t=>t.id==tarjetaId)?.nombre || ''}`,
-    fecha,
-    esNomina: false
+    fecha, esNomina: false
   });
   state.debito.saldo = (state.debito.saldo || 0) - monto;
 
