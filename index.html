@@ -1072,10 +1072,10 @@
         <div class="card">
           <div class="card-label">TOTAL AHORRADO</div>
           <div class="card-value green" id="ahorro-total">$0.00</div>
-          <div class="card-sub">Metas + ahorro libre</div>
+          <div class="card-sub">Metas + ahorros libres</div>
         </div>
         <div class="card">
-          <div class="card-label">AHORRO LIBRE</div>
+          <div class="card-label">AHORROS LIBRES</div>
           <div class="card-value blue" id="ahorro-libre-saldo">$0.00</div>
           <div class="card-sub">Sin meta asignada</div>
         </div>
@@ -1142,7 +1142,29 @@
         <button class="btn btn-primary" onclick="agregarMeta()">Crear meta</button>
       </div>
 
-      <!-- Transferencia débito ↔ ahorro -->
+      <!-- Nuevo ahorro libre -->
+      <div class="panel">
+        <div class="panel-title"><div class="dot"></div>Nuevo ahorro libre</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Sin objetivo ni fecha límite. Solo dale un nombre y empieza a guardar.</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Nombre</label>
+            <input class="form-input" type="text" id="libre-nombre" placeholder="Ej: CETES, Colchón, Efectivo…"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Ícono</label>
+            <select class="form-select" id="libre-icono">
+              <option value="💰">💰 General</option>
+              <option value="🏦">🏦 CETES / Banco</option>
+              <option value="📈">📈 Inversión</option>
+              <option value="🪙">🪙 Efectivo</option>
+              <option value="💵">💵 Dólares</option>
+              <option value="🎯">🎯 Otro</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="agregarAhorroLibre()">Crear ahorro libre</button>
+      </div>
       <div class="panel">
         <div class="panel-title"><div class="dot"></div>Transferir</div>
         <!-- Toggle dirección -->
@@ -1359,9 +1381,9 @@ let state = {
   tarjetas: [],
   cargos: [],
   domiciliados: [], // pagos automáticos mensuales en tarjeta
-  metas: [],        // metas de ahorro
-  movAhorro: [],    // historial de movimientos de ahorro
-  ahorroLibre: 0,   // saldo de ahorro sin meta asignada
+  metas: [],          // metas de ahorro con objetivo
+  movAhorro: [],      // historial de movimientos de ahorro
+  ahorrosLibres: [],  // múltiples cuentas de ahorro libre (sin meta)
   gastosFijos: [],
   movDebito: [],
   lastNominaPrompt: null,
@@ -1503,7 +1525,8 @@ function renderDashboard() {
   const gastosMes = calcGastosMensuales();
   const pagadoGF = calcGFPagadoEsteMes();
   const usadoCredito = calcUsadoCredito();
-  const totalAhorro = (state.metas||[]).reduce((s,m) => s + (m.saldo||0), 0);
+  const totalAhorro = (state.metas||[]).reduce((s,m) => s + (m.saldo||0), 0)
+                    + (state.ahorrosLibres||[]).reduce((s,a) => s + (a.saldo||0), 0);
 
   document.getElementById('dash-debito').textContent = fmt(saldo);
   document.getElementById('dash-credito').textContent = fmt(usadoCredito);
@@ -2158,7 +2181,25 @@ function eliminarDomiciliado(i) {
 
 const colorMap = { green: 'var(--green)', blue: 'var(--blue)', yellow: 'var(--yellow)', red: 'var(--red)' };
 
-function agregarMeta() {
+function agregarAhorroLibre() {
+  const nombre = document.getElementById('libre-nombre').value.trim();
+  const icono  = document.getElementById('libre-icono').value;
+  if (!nombre) { toast('Escribe un nombre'); return; }
+  if (!state.ahorrosLibres) state.ahorrosLibres = [];
+  state.ahorrosLibres.push({ id: Date.now().toString(), nombre, icono, saldo: 0 });
+  saveState();
+  document.getElementById('libre-nombre').value = '';
+  renderAhorro();
+  toast('Ahorro libre creado ✓');
+}
+
+function eliminarAhorroLibre(id) {
+  if (!confirm('¿Eliminar este ahorro libre?')) return;
+  state.ahorrosLibres = (state.ahorrosLibres||[]).filter(a => a.id !== id);
+  state.movAhorro = (state.movAhorro||[]).filter(m => m.metaId !== id);
+  saveState(); renderAhorro(); renderDashboard();
+  toast('Ahorro libre eliminado');
+}
   const nombre   = document.getElementById('meta-nombre').value.trim();
   const objetivo = parseFloat(document.getElementById('meta-objetivo').value) || 0;
   const fecha    = document.getElementById('meta-fecha').value || null;
@@ -2209,23 +2250,25 @@ function transferirAhorro() {
   const nota   = document.getElementById('transf-nota').value.trim() || (tipo === 'deposito' ? 'Transferencia a ahorro' : 'Retiro de ahorro');
   if (!monto || monto <= 0) { toast('Ingresa un monto válido'); return; }
 
-  const esLibre = metaId === '__libre__';
-  const meta    = !esLibre ? state.metas.find(m => m.id === metaId) : null;
-  if (!esLibre && !meta) { toast('Selecciona una meta'); return; }
+  const esLibre  = metaId !== '' && !(state.metas||[]).find(m => m.id === metaId);
+  const libreAcc = esLibre ? (state.ahorrosLibres||[]).find(a => a.id === metaId) : null;
+  const meta     = !esLibre ? (state.metas||[]).find(m => m.id === metaId) : null;
+  if (!esLibre && !meta) { toast('Selecciona un destino'); return; }
+  if (esLibre && !libreAcc) { toast('Selecciona un destino'); return; }
 
   if (tipo === 'deposito') {
     if (state.debito.saldo < monto) { toast('Saldo insuficiente en débito'); return; }
     state.debito.saldo -= monto;
-    if (esLibre) { state.ahorroLibre = (state.ahorroLibre || 0) + monto; }
-    else { meta.saldo = (meta.saldo || 0) + monto; }
-    state.movDebito.push({ tipo: 'gasto', monto, desc: `Ahorro: ${esLibre ? '💰 Libre' : meta.icono + ' ' + meta.nombre}`, fecha, esNomina: false });
+    if (esLibre) libreAcc.saldo = (libreAcc.saldo || 0) + monto;
+    else meta.saldo = (meta.saldo || 0) + monto;
+    state.movDebito.push({ tipo: 'gasto', monto, desc: `Ahorro: ${esLibre ? libreAcc.icono + ' ' + libreAcc.nombre : meta.icono + ' ' + meta.nombre}`, fecha, esNomina: false });
   } else {
-    const saldoDisp = esLibre ? (state.ahorroLibre || 0) : (meta.saldo || 0);
+    const saldoDisp = esLibre ? (libreAcc.saldo || 0) : (meta.saldo || 0);
     if (saldoDisp < monto) { toast('Saldo insuficiente en ahorro'); return; }
-    if (esLibre) { state.ahorroLibre = (state.ahorroLibre || 0) - monto; }
-    else { meta.saldo = (meta.saldo || 0) - monto; }
+    if (esLibre) libreAcc.saldo = (libreAcc.saldo || 0) - monto;
+    else meta.saldo = (meta.saldo || 0) - monto;
     state.debito.saldo += monto;
-    state.movDebito.push({ tipo: 'deposito', monto, desc: `Retiro ahorro: ${esLibre ? '💰 Libre' : meta.icono + ' ' + meta.nombre}`, fecha, esNomina: false });
+    state.movDebito.push({ tipo: 'deposito', monto, desc: `Retiro ahorro: ${esLibre ? libreAcc.icono + ' ' + libreAcc.nombre : meta.icono + ' ' + meta.nombre}`, fecha, esNomina: false });
   }
 
   if (!state.movAhorro) state.movAhorro = [];
@@ -2234,7 +2277,7 @@ function transferirAhorro() {
   document.getElementById('transf-monto').value = '';
   document.getElementById('transf-nota').value  = '';
   renderAhorro(); renderDashboard(); renderDebito();
-  const nombre = esLibre ? 'Ahorro libre' : meta.nombre;
+  const nombre = esLibre ? libreAcc.nombre : meta.nombre;
   toast(tipo === 'deposito' ? `+${fmt(monto)} a ${nombre} ✓` : `${fmt(monto)} retirado de ${nombre} ✓`);
 }
 
@@ -2245,12 +2288,14 @@ function registrarRendimiento() {
   const desc   = document.getElementById('rend-desc').value.trim() || 'Rendimiento';
   if (!monto || monto <= 0) { toast('Ingresa un monto válido'); return; }
 
-  const esLibre = metaId === '__libre__';
-  const meta    = !esLibre ? state.metas.find(m => m.id === metaId) : null;
-  if (!esLibre && !meta) { toast('Selecciona una meta'); return; }
+  const esLibre  = metaId !== '' && !(state.metas||[]).find(m => m.id === metaId);
+  const libreAcc = esLibre ? (state.ahorrosLibres||[]).find(a => a.id === metaId) : null;
+  const meta     = !esLibre ? (state.metas||[]).find(m => m.id === metaId) : null;
+  if (!esLibre && !meta) { toast('Selecciona una cuenta'); return; }
+  if (esLibre && !libreAcc) { toast('Selecciona una cuenta'); return; }
 
-  if (esLibre) { state.ahorroLibre = (state.ahorroLibre || 0) + monto; }
-  else { meta.saldo = (meta.saldo || 0) + monto; }
+  if (esLibre) libreAcc.saldo = (libreAcc.saldo || 0) + monto;
+  else meta.saldo = (meta.saldo || 0) + monto;
 
   if (!state.movAhorro) state.movAhorro = [];
   state.movAhorro.push({ id: Date.now().toString(), metaId, tipo: 'rendimiento', monto, fecha, nota: desc });
@@ -2266,7 +2311,7 @@ function renderAhorro() {
   if (!state.movAhorro) state.movAhorro = [];
 
   // Cards resumen
-  const saldoLibre    = state.ahorroLibre || 0;
+  const saldoLibre    = (state.ahorrosLibres||[]).reduce((s,a) => s + (a.saldo||0), 0);
   const totalMetas    = state.metas.reduce((s, m) => s + (m.saldo || 0), 0);
   const totalAhorrado = totalMetas + saldoLibre;
   const totalRend     = state.movAhorro.filter(m => m.tipo === 'rendimiento').reduce((s, m) => s + m.monto, 0);
@@ -2277,14 +2322,18 @@ function renderAhorro() {
   document.getElementById('ahorro-metas-count').textContent  = state.metas.filter(m => (m.saldo||0) < m.objetivo).length;
   document.getElementById('ahorro-completadas').textContent  = completadas;
 
-  // Poblar dropdowns — siempre incluir opción libre primero
+  // Poblar dropdowns — libres primero, luego metas
   ['transf-meta', 'rend-meta'].forEach(id => {
     const sel = document.getElementById(id);
-    sel.innerHTML = '<option value="__libre__">💰 Ahorro libre</option>';
+    sel.innerHTML = '<option value="">— Seleccionar —</option>';
+    (state.ahorrosLibres||[]).forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.id; opt.textContent = `${a.icono} ${a.nombre} (libre)`;
+      sel.appendChild(opt);
+    });
     state.metas.forEach(m => {
       const opt = document.createElement('option');
-      opt.value = m.id;
-      opt.textContent = `${m.icono} ${m.nombre}`;
+      opt.value = m.id; opt.textContent = `${m.icono} ${m.nombre}`;
       sel.appendChild(opt);
     });
   });
@@ -2301,35 +2350,38 @@ function renderAhorro() {
     return;
   }
 
-  // Ahorro libre panel + metas
-  const libreMovs = state.movAhorro.filter(m => m.metaId === '__libre__').slice(-5).reverse();
-  const libreHtml = `<div class="panel" style="border-left:3px solid var(--blue);margin-bottom:16px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <div>
-        <div style="font-size:22px;margin-bottom:2px">💰</div>
-        <div style="font-size:18px;font-weight:800">Ahorro libre</div>
-        <div style="font-size:12px;color:var(--text2);margin-top:2px">Sin meta asignada</div>
+  // Ahorros libres panels
+  const libresHtml = (state.ahorrosLibres||[]).map(acc => {
+    const movs = state.movAhorro.filter(m => m.metaId === acc.id).slice(-5).reverse();
+    return `<div class="panel" style="border-left:3px solid var(--blue);margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <div>
+          <div style="font-size:22px;margin-bottom:2px">${acc.icono}</div>
+          <div style="font-size:18px;font-weight:800">${acc.nombre}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;font-family:'Space Mono',monospace;letter-spacing:1px">AHORRO LIBRE</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:26px;font-weight:800;color:var(--blue)">${fmt(acc.saldo||0)}</div>
+          <div style="font-size:12px;color:var(--text2)">disponible</div>
+        </div>
       </div>
-      <div style="text-align:right">
-        <div style="font-size:26px;font-weight:800;color:var(--blue)">${fmt(saldoLibre)}</div>
-        <div style="font-size:12px;color:var(--text2)">disponible</div>
-      </div>
-    </div>
-    ${libreMovs.length ? `
-    <div style="font-size:11px;font-family:'Space Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Últimos movimientos</div>
-    <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">
-      ${libreMovs.map(mv => `
-        <div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border)">
-          <span style="color:var(--text2)">${mv.tipo === 'rendimiento' ? '📈' : mv.tipo === 'deposito' ? '↓' : '↑'} ${mv.nota}</span>
-          <span style="display:flex;gap:10px">
-            <span style="font-size:11px;color:var(--text3)">${mv.fecha}</span>
-            <span style="font-weight:700;color:${mv.tipo==='retiro'?'var(--red)':'var(--green)'}">${mv.tipo==='retiro'?'-':'+'}${fmt(mv.monto)}</span>
-          </span>
-        </div>`).join('')}
-    </div>` : ''}
-  </div>`;
+      ${movs.length ? `
+      <div style="font-size:11px;font-family:'Space Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Últimos movimientos</div>
+      <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px">
+        ${movs.map(mv => `
+          <div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border)">
+            <span style="color:var(--text2)">${mv.tipo==='rendimiento'?'📈':mv.tipo==='deposito'?'↓':'↑'} ${mv.nota}</span>
+            <span style="display:flex;gap:10px;align-items:center">
+              <span style="font-size:11px;color:var(--text3)">${mv.fecha}</span>
+              <span style="font-weight:700;color:${mv.tipo==='retiro'?'var(--red)':'var(--green)'}">${mv.tipo==='retiro'?'-':'+'}${fmt(mv.monto)}</span>
+            </span>
+          </div>`).join('')}
+      </div>` : ''}
+      <button class="btn btn-danger btn-sm" onclick="eliminarAhorroLibre('${acc.id}')">✕ Eliminar</button>
+    </div>`;
+  }).join('');
 
-  cont.innerHTML = libreHtml + state.metas.map(meta => {
+  cont.innerHTML = libresHtml + state.metas.map(meta => {
     const saldo    = meta.saldo || 0;
     const pct      = Math.min(100, Math.round((saldo / meta.objetivo) * 100));
     const color    = colorMap[meta.color] || 'var(--green)';
@@ -2972,7 +3024,7 @@ async function loadFromSheet() {
     state.debito.tipoNomina  = cfgMap['tipoNomina']             || 'fija';
     state.lastNominaPrompt   = cfgMap['lastNominaPrompt']       || null;
     try { state.gfPagos = JSON.parse(cfgMap['gfPagos'] || '{}'); } catch(e) { state.gfPagos = {}; }
-    state.ahorroLibre = parseFloat(cfgMap['ahorroLibre']) || 0;
+    try { state.ahorrosLibres = JSON.parse(cfgMap['ahorrosLibres'] || '[]'); } catch(e) { state.ahorrosLibres = []; }
 
     // MovDebito
     state.movDebito = (movData || []).slice(1).filter(r => r[0]).map(r => ({
@@ -3066,7 +3118,7 @@ async function saveToSheet() {
       ['tipoNomina',       state.debito.tipoNomina],
       ['lastNominaPrompt', state.lastNominaPrompt || ''],
       ['gfPagos',          JSON.stringify(state.gfPagos || {})],
-      ['ahorroLibre',      state.ahorroLibre || 0]
+      ['ahorrosLibres',    JSON.stringify(state.ahorrosLibres || [])]
     ];
     const movRows = [['tipo','monto','desc','fecha','esNomina'],
       ...state.movDebito.map(m => [m.tipo, m.monto, m.desc, m.fecha, m.esNomina||false])];
@@ -3180,7 +3232,7 @@ initDateInputs();
 if (!state.domiciliados) state.domiciliados = [];
 if (!state.metas) state.metas = [];
 if (!state.movAhorro) state.movAhorro = [];
-if (state.ahorroLibre === undefined) state.ahorroLibre = 0;
+if (!state.ahorrosLibres) state.ahorrosLibres = [];
 procesarDomiciliados();
 renderDashboard();
 
