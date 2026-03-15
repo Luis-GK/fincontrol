@@ -2036,8 +2036,8 @@ function renderCredito() {
       <td>${c.desc}</td>
       <td>${tc ? tc.nombre : '—'}</td>
       <td><span class="badge ${tipoBadge}">${tipoLabel}</span></td>
-      <td style="font-family:'Space Mono',monospace;font-size:12px;color:var(--text2)">${c.tipo==='contado'?'—':fmt(c.total)}</td>
-      <td style="font-family:'Space Mono',monospace;font-size:12px">${c.tipo==='contado'?'—':fmt(cuota)}</td>
+      <td style="font-family:'Space Mono',monospace;font-size:12px;color:var(--text2)">${fmt(c.total)}</td>
+      <td style="font-family:'Space Mono',monospace;font-size:12px">${c.tipo==='contado'?fmt(c.total):fmt(cuota)}</td>
       <td style="color:var(--green);font-weight:700">${c.tipo==='contado'?fmt(c.pagado||0):fmt(pagadoMostrar)}</td>
       <td style="font-size:12px;color:var(--text2)">${c.tipo==='contado'?'—':`${cargoDelMes}/${c.meses}`}</td>
       <td style="color:var(--red);font-weight:700">${fmt(restante)}</td>
@@ -2048,8 +2048,8 @@ function renderCredito() {
   // Fila de totales
   const totalPagado   = state.cargos.reduce((s,c) => s + (c.pagado||0), 0);
   const totalRestante = state.cargos.reduce((s,c) => s + calcRestanteCargo(c), 0);
-  const totalCuotas   = state.cargos.reduce((s,c) => {
-    if (c.tipo === 'contado') return s;
+  const totalCuotas = state.cargos.reduce((s,c) => {
+    if (c.tipo === 'contado') return s + c.total;
     return s + Math.round((c.total / c.meses)*100)/100;
   }, 0);
   tbody.innerHTML += `<tr style="border-top:2px solid var(--border);background:var(--bg2)">
