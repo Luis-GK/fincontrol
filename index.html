@@ -1928,20 +1928,23 @@ function eliminarMovDebito(i) {
   const m = state.movDebito[i];
   state.debito.saldo = (state.debito.saldo || 0) - (m.tipo === 'deposito' ? m.monto : -m.monto);
 
-  // Si era depósito de nómina, recalcular nomina desde el historial restante
-  if (m.esNomina && m.tipo === 'deposito') {
-    state.lastNominaPrompt = null; // que el banner vuelva a aparecer
-    // Buscar el depósito de nómina más reciente que quede después de eliminar este
-    const anteriores = state.movDebito.filter((mv, idx) =>
-      idx !== i && mv.esNomina && mv.tipo === 'deposito'
-    );
-    if (anteriores.length > 0) {
-      // Usar el más reciente
-      const masReciente = anteriores.sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
-      state.debito.nomina = masReciente.monto;
-    } else {
-      state.debito.nomina = 0;
-    }
+  // Detectar si es depósito de nómina — por esNomina O por descripción común
+  const esDepNomina = m.tipo === 'deposito' &&
+    (m.esNomina === true || m.esNomina === 'true' || m.esNomina === 'TRUE' ||
+     (m.desc || '').toLowerCase().includes('nóm') ||
+     (m.desc || '').toLowerCase().includes('nom'));
+
+  if (esDepNomina) {
+    state.lastNominaPrompt = null;
+    const anteriores = state.movDebito.filter((mv, idx) => {
+      const esN = mv.esNomina === true || mv.esNomina === 'true' || mv.esNomina === 'TRUE' ||
+                  (mv.desc||'').toLowerCase().includes('nóm') ||
+                  (mv.desc||'').toLowerCase().includes('nom');
+      return idx !== i && esN && mv.tipo === 'deposito';
+    });
+    state.debito.nomina = anteriores.length > 0
+      ? anteriores.sort((a,b) => b.fecha.localeCompare(a.fecha))[0].monto
+      : 0;
   }
 
   state.movDebito.splice(i, 1);
@@ -3068,7 +3071,11 @@ function actualizarBannerNomina() {
 
   // Si ya hay depósito registrado desde ese día → ocultar
   const fechaDepStr = fechaDeposito.toISOString().split('T')[0];
-  const yaDeposito = state.movDebito.some(m => m.tipo === 'deposito' && m.esNomina && m.fecha >= fechaDepStr);
+  const yaDeposito = state.movDebito.some(m =>
+    m.tipo === 'deposito' &&
+    (m.esNomina === true || m.esNomina === 'true' || m.esNomina === 'TRUE') &&
+    m.fecha >= fechaDepStr
+  );
   if (yaDeposito) { hide(); return; }
 
   // Si pospuesto HOY → ocultar hasta mañana
@@ -3343,7 +3350,7 @@ async function loadFromSheet() {
     // MovDebito
     state.movDebito = (movData || []).slice(1).filter(r => r[0]).map(r => ({
       tipo: r[0], monto: parseFloat(r[1])||0, desc: r[2]||'', fecha: r[3]||'',
-      esNomina: r[4] === 'true'
+      esNomina: r[4] === 'true' || r[4] === 'TRUE' || r[4] === true
     }));
 
     // Tarjetas
