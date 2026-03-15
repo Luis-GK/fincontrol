@@ -2122,18 +2122,13 @@ function calcMesesTranscurridos(cargo) {
   return cuotasPagadas + 1;
 }
 
-// ── Calcula lo que falta por pagar según fechas de corte
+// ── Calcula lo que falta por pagar
 function calcRestanteCargo(cargo) {
   if (cargo.tipo === 'contado') {
     return Math.max(0, cargo.total - (cargo.pagado || 0));
   }
-  const mesesVencidos = calcMesesTranscurridos(cargo);
-  const cuota = cargo.total / cargo.meses;
-  const debidoPorFecha = cuota * mesesVencidos;
-  const pagadoManual = cargo.pagado || 0;
-  // Lo que falta = total - lo mayor entre lo pagado manualmente y lo que debió pagarse por fecha
-  const totalPagado = Math.max(debidoPorFecha, pagadoManual);
-  return Math.max(0, Math.round((cargo.total - totalPagado) * 100) / 100);
+  // Para MSI/MCI: total - lo que realmente se ha pagado
+  return Math.max(0, Math.round((cargo.total - (cargo.pagado || 0)) * 100) / 100);
 }
 
 // ── Calcula el "usado en crédito" para el dashboard:
