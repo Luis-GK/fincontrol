@@ -2200,6 +2200,8 @@ function eliminarAhorroLibre(id) {
   saveState(); renderAhorro(); renderDashboard();
   toast('Ahorro libre eliminado');
 }
+
+function agregarMeta() {
   const nombre   = document.getElementById('meta-nombre').value.trim();
   const objetivo = parseFloat(document.getElementById('meta-objetivo').value) || 0;
   const fecha    = document.getElementById('meta-fecha').value || null;
@@ -2856,8 +2858,8 @@ function iniciarSesionGoogle(prompt = 'select_account') {
     callback: async (resp) => {
       if (resp.error) { setSyncState('error', 'Error de auth'); return; }
       accessToken = resp.access_token;
-      // Guardar token y expiración (dura ~1 hora)
-      const expiry = Date.now() + (resp.expires_in - 60) * 1000;
+      // Guardar token con expiración de 8 horas
+      const expiry = Date.now() + 8 * 60 * 60 * 1000;
       localStorage.setItem('fc_token', accessToken);
       localStorage.setItem('fc_token_expiry', expiry);
       await getUserInfo();
@@ -2873,52 +2875,64 @@ function iniciarSesionGoogle(prompt = 'select_account') {
   tokenClient.requestAccessToken();
 }
 
-// ── Auto-login silencioso al refrescar
+// ── Auto-login: muestra la app con datos locales inmediatamente, sincroniza en background
 function intentarAutoLogin() {
-  const token  = localStorage.getItem('fc_token');
-  const expiry = parseInt(localStorage.getItem('fc_token_expiry') || '0');
+  const token       = localStorage.getItem('fc_token');
+  const expiry      = parseInt(localStorage.getItem('fc_token_expiry') || '0');
+  const savedEmail  = localStorage.getItem('fc_user_email');
+  const savedName   = localStorage.getItem('fc_user_initials');
+
+  // Si hay datos guardados localmente → mostrar app de inmediato sin esperar a Google
+  if (savedEmail) {
+    document.getElementById('login-screen').classList.add('hidden');
+    renderDashboard();
+  }
+
   if (token && Date.now() < expiry) {
-    // Token aún válido — úsalo directo
+    // Token válido → sincronizar en segundo plano silenciosamente
     accessToken = token;
     getUserInfo().then(async () => {
-      document.getElementById('login-screen').classList.add('hidden');
       setSyncState('syncing', 'Sincronizando…');
       await initSheet();
       await loadFromSheet();
       setSyncState('synced', 'Sincronizado');
       renderDashboard();
       checkNominaVariable();
-    });
-  } else if (localStorage.getItem('fc_user_email')) {
-    // Token expirado pero sabemos que el usuario ya inició sesión antes
-    // Renovar silenciosamente sin mostrar popup
-    tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: CLIENT_ID,
-      scope: SCOPES,
-      prompt: '',
-      hint: localStorage.getItem('fc_user_email'),
-      callback: async (resp) => {
-        if (resp.error) {
-          // No se pudo renovar silenciosamente, mostrar login
-          return;
+    }).catch(() => setSyncState('error', 'Sin conexión'));
+
+  } else if (savedEmail) {
+    // Token expirado → renovar silenciosamente en background
+    try {
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        prompt: '',
+        hint: savedEmail,
+        callback: async (resp) => {
+          if (resp.error) {
+            setSyncState('', 'Datos locales');
+            return;
+          }
+          accessToken = resp.access_token;
+          // Extender expiración a 8 horas desde ahora
+          const newExpiry = Date.now() + 8 * 60 * 60 * 1000;
+          localStorage.setItem('fc_token', accessToken);
+          localStorage.setItem('fc_token_expiry', newExpiry);
+          await getUserInfo();
+          setSyncState('syncing', 'Sincronizando…');
+          await initSheet();
+          await loadFromSheet();
+          setSyncState('synced', 'Sincronizado');
+          renderDashboard();
+          checkNominaVariable();
         }
-        accessToken = resp.access_token;
-        const expiry = Date.now() + (resp.expires_in - 60) * 1000;
-        localStorage.setItem('fc_token', accessToken);
-        localStorage.setItem('fc_token_expiry', expiry);
-        await getUserInfo();
-        document.getElementById('login-screen').classList.add('hidden');
-        setSyncState('syncing', 'Sincronizando…');
-        await initSheet();
-        await loadFromSheet();
-        setSyncState('synced', 'Sincronizado');
-        renderDashboard();
-        checkNominaVariable();
-      }
-    });
-    tokenClient.requestAccessToken();
+      });
+      tokenClient.requestAccessToken();
+    } catch(e) {
+      setSyncState('', 'Datos locales');
+    }
   }
-  // Si no hay nada guardado, se queda en la pantalla de login
+  // Si no hay nada → se queda en pantalla de login
 }
 
 // ── Info del usuario
