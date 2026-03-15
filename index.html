@@ -3071,7 +3071,7 @@ function actualizarBannerNomina() {
   const yaDeposito = state.movDebito.some(m => m.tipo === 'deposito' && m.esNomina && m.fecha >= fechaDepStr);
   if (yaDeposito) { hide(); return; }
 
-  // Si pospuesto hoy → ocultar
+  // Si pospuesto HOY → ocultar hasta mañana
   if (state.lastNominaPrompt === hoy) { hide(); return; }
 
   // Mostrar con mensaje apropiado
