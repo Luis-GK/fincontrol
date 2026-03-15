@@ -2107,30 +2107,19 @@ function fechaPrimerPago(cargo) {
   return primerPago;
 }
 
-// ── Calcula cuántas mensualidades han vencido contando cortes desde la compra
+// ── Calcula el "Cargo del mes" actual
+// Lógica: cuotas ya pagadas + 1 (el cargo actual pendiente)
+// Desaparece cuando cuotas pagadas >= total de meses
 function calcMesesTranscurridos(cargo) {
   if (cargo.tipo === 'contado') return (cargo.pagado || 0) > 0 ? 1 : 0;
 
-  const tc = state.tarjetas.find(t => t.id == cargo.tarjetaId);
-  const diaCorte = tc ? (tc.corte || 12) : 12;
+  const cuota       = Math.round((cargo.total / cargo.meses) * 100) / 100;
+  const cuotasPagadas = cuota > 0 ? Math.floor((cargo.pagado || 0) / cuota) : 0;
 
-  const hoy = new Date(); hoy.setHours(0,0,0,0);
-  const fechaCompra = new Date(cargo.fecha + 'T00:00:00');
-
-  // Primer corte POSTERIOR a la fecha de compra
-  let primerCorte = new Date(fechaCompra.getFullYear(), fechaCompra.getMonth(), diaCorte);
-  if (fechaCompra >= primerCorte) {
-    // Compra en o después del corte → siguiente mes
-    primerCorte = new Date(fechaCompra.getFullYear(), fechaCompra.getMonth() + 1, diaCorte);
-  }
-
-  if (hoy < primerCorte) return 0; // aún no ha llegado el primer corte
-
-  // Cuántos cortes han pasado desde el primer corte (inclusive)
-  const meses = (hoy.getFullYear() - primerCorte.getFullYear()) * 12
-    + (hoy.getMonth() - primerCorte.getMonth()) + 1;
-
-  return Math.min(Math.max(0, meses), cargo.meses);
+  // Cargo actual = cuotas pagadas + 1
+  // Si ya pagaste todas, retornar meses+1 para que limpiarCargosLiquidados lo elimine
+  if (cuotasPagadas >= cargo.meses) return cargo.meses + 1;
+  return cuotasPagadas + 1;
 }
 
 // ── Calcula lo que falta por pagar según fechas de corte
@@ -2171,10 +2160,10 @@ function limpiarCargosLiquidados() {
   const antes = state.cargos.length;
   state.cargos = state.cargos.filter(c => {
     if (c.tipo === 'contado') return true;
-    const cargoDelMes = calcMesesTranscurridos(c);
-    // Solo eliminar si YA pasaron todos los cortes Y está pagado
-    const liquidado = cargoDelMes > c.meses && calcRestanteCargo(c) <= 0;
-    return !liquidado;
+    const cuota = Math.round((c.total / c.meses) * 100) / 100;
+    const cuotasPagadas = cuota > 0 ? Math.floor((c.pagado || 0) / cuota) : 0;
+    // Eliminar solo cuando ya se pagaron TODAS las cuotas
+    return cuotasPagadas < c.meses;
   });
   if (state.cargos.length < antes) {
     guardadoInmediato();
