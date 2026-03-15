@@ -1015,7 +1015,7 @@
         <div class="table-wrap">
           <table>
             <thead><tr>
-              <th>Fecha</th><th>Descripción</th><th>Tarjeta</th><th>Tipo</th><th>Cuota/mes</th><th>Pagado</th><th>Cargo del mes</th><th>Restante</th><th></th>
+              <th>Fecha</th><th>Descripción</th><th>Tarjeta</th><th>Tipo</th><th>Total</th><th>Cuota/mes</th><th>Pagado</th><th>Cargo del mes</th><th>Restante</th><th></th>
             </tr></thead>
             <tbody id="credito-historial">
               <tr><td colspan="8">
@@ -2036,6 +2036,7 @@ function renderCredito() {
       <td>${c.desc}</td>
       <td>${tc ? tc.nombre : '—'}</td>
       <td><span class="badge ${tipoBadge}">${tipoLabel}</span></td>
+      <td style="font-family:'Space Mono',monospace;font-size:12px;color:var(--text2)">${c.tipo==='contado'?'—':fmt(c.total)}</td>
       <td style="font-family:'Space Mono',monospace;font-size:12px">${c.tipo==='contado'?'—':fmt(cuota)}</td>
       <td style="color:var(--green);font-weight:700">${c.tipo==='contado'?fmt(c.pagado||0):fmt(pagadoMostrar)}</td>
       <td style="font-size:12px;color:var(--text2)">${c.tipo==='contado'?'—':`${cargoDelMes}/${c.meses}`}</td>
@@ -2052,7 +2053,7 @@ function renderCredito() {
     return s + Math.round((c.total / c.meses)*100)/100;
   }, 0);
   tbody.innerHTML += `<tr style="border-top:2px solid var(--border);background:var(--bg2)">
-    <td colspan="4" style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--text2);padding:10px 12px">TOTAL</td>
+    <td colspan="5" style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--text2);padding:10px 12px">TOTAL</td>
     <td style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--yellow)">${fmt(totalCuotas)}</td>
     <td style="color:var(--green);font-weight:700">${fmt(totalPagado)}</td>
     <td></td>
