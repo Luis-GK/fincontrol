@@ -3166,11 +3166,18 @@ function iniciarSesionGoogle(prompt = 'select_account') {
     callback: async (resp) => {
       if (resp.error) { setSyncState('error', 'Error de auth'); return; }
       accessToken = resp.access_token;
-      // Guardar token con expiración de 8 horas
       const expiry = Date.now() + 8 * 60 * 60 * 1000;
       localStorage.setItem('fc_token', accessToken);
       localStorage.setItem('fc_token_expiry', expiry);
-      await getUserInfo();
+      // Solo llamar getUserInfo si no tenemos el nombre ya guardado
+      if (!localStorage.getItem('fc_user_name')) {
+        await getUserInfo();
+      } else {
+        // Restaurar nombre desde localStorage
+        const nombre = localStorage.getItem('fc_user_name');
+        document.getElementById('user-name-text').textContent = nombre;
+        document.getElementById('user-chip').style.display = 'flex';
+      }
       document.getElementById('login-screen').classList.add('hidden');
       setSyncState('syncing', 'Sincronizando…');
       await initSheet();
@@ -3600,72 +3607,13 @@ window.addEventListener('load', () => {
 // PWA — SERVICE WORKER (inline como blob)
 // ══════════════════════════════════════
 if ('serviceWorker' in navigator) {
-  const swCode = `
-const CACHE = 'fincontrol-v1';
-const ASSETS = [
-  './',
-  'https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap'
-];
-
-self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(ASSETS).catch(() => {}))
-  );
-  self.skipWaiting();
-});
-
-self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
-});
-
-self.addEventListener('fetch', e => {
-  // Solo cachear GET, ignorar requests de Google API/Auth
-  if (e.request.method !== 'GET') return;
-  const url = e.request.url;
-  if (url.includes('googleapis.com') || url.includes('accounts.google.com')) return;
-
-  e.respondWith(
-    caches.match(e.request).then(cached => {
-      // Network first para el HTML principal, cache fallback para el resto
-      const fetchPromise = fetch(e.request)
-        .then(res => {
-          if (res && res.status === 200 && res.type !== 'opaque') {
-            const clone = res.clone();
-            caches.open(CACHE).then(c => c.put(e.request, clone));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return url.includes('index.html') || url.endsWith('/') || url.endsWith('/fincontrol')
-        ? fetchPromise
-        : (cached || fetchPromise);
-    })
-  );
-});
-  `;
-
-  const blob = new Blob([swCode], { type: 'application/javascript' });
-  const swUrl = URL.createObjectURL(blob);
-
-  navigator.serviceWorker.register(swUrl, { scope: './' })
-    .then(reg => {
-      console.log('[PWA] Service Worker registrado', reg.scope);
-      // Notificar si hay actualización disponible
-      reg.addEventListener('updatefound', () => {
-        const newSW = reg.installing;
-        newSW.addEventListener('statechange', () => {
-          if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
-            toast('Nueva versión disponible — recarga para actualizar');
-          }
-        });
-      });
-    })
-    .catch(err => console.log('[PWA] SW error:', err));
+  // Registrar SW desde un script inline via data URL — compatible con GitHub Pages
+  const swCode = `const CACHE='fincontrol-v2';self.addEventListener('install',e=>{self.skipWaiting()});self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim()});self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const u=e.request.url;if(u.includes('googleapis.com')||u.includes('accounts.google.com'))return;e.respondWith(caches.match(e.request).then(cached=>{const fp=fetch(e.request).then(res=>{if(res&&res.status===200&&res.type!=='opaque'){const cl=res.clone();caches.open(CACHE).then(c=>c.put(e.request,cl))}return res}).catch(()=>cached);return cached||fp}))});`;
+  const swBlob = new Blob([swCode], {type: 'text/javascript'});
+  const swUrl  = URL.createObjectURL(swBlob);
+  navigator.serviceWorker.register(swUrl)
+    .then(() => console.log('[PWA] Service Worker registrado'))
+    .catch(() => {}); // silenciar error en GitHub Pages
 }
 </script>
 </body>
