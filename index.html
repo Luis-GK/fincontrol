@@ -2107,19 +2107,28 @@ function fechaPrimerPago(cargo) {
   return primerPago;
 }
 
-// ── Calcula cuántas mensualidades ya vencieron contando desde el primer pago
+// ── Calcula cuántas mensualidades han vencido contando cortes desde la compra
 function calcMesesTranscurridos(cargo) {
   if (cargo.tipo === 'contado') return (cargo.pagado || 0) > 0 ? 1 : 0;
 
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
-  const primerPago = fechaPrimerPago(cargo);
+  const tc = state.tarjetas.find(t => t.id == cargo.tarjetaId);
+  const diaCorte = tc ? (tc.corte || 12) : 12;
 
-  if (hoy < primerPago) return 0; // aún no ha llegado el primer pago
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const fechaCompra = new Date(cargo.fecha + 'T00:00:00');
 
-  // Meses completos desde el primer pago hasta hoy (inclusive el mes del primer pago)
-  const meses = (hoy.getFullYear() - primerPago.getFullYear()) * 12
-    + (hoy.getMonth() - primerPago.getMonth()) + 1;
+  // Primer corte POSTERIOR a la fecha de compra
+  let primerCorte = new Date(fechaCompra.getFullYear(), fechaCompra.getMonth(), diaCorte);
+  if (fechaCompra >= primerCorte) {
+    // Compra en o después del corte → siguiente mes
+    primerCorte = new Date(fechaCompra.getFullYear(), fechaCompra.getMonth() + 1, diaCorte);
+  }
+
+  if (hoy < primerCorte) return 0; // aún no ha llegado el primer corte
+
+  // Cuántos cortes han pasado desde el primer corte (inclusive)
+  const meses = (hoy.getFullYear() - primerCorte.getFullYear()) * 12
+    + (hoy.getMonth() - primerCorte.getMonth()) + 1;
 
   return Math.min(Math.max(0, meses), cargo.meses);
 }
