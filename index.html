@@ -2,8 +2,81 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>FinControl</title>
+
+  <!-- PWA Meta Tags -->
+  <meta name="application-name" content="FinControl"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="FinControl"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="theme-color" content="#0a0a0a"/>
+  <meta name="description" content="Tu registro financiero personal. Débito, crédito, ahorro y gastos fijos en un solo lugar."/>
+
+  <!-- PWA Manifest (inline como blob) -->
+  <script>
+    const _manifest = {
+      name: "FinControl",
+      short_name: "FinControl",
+      description: "Tu registro financiero personal",
+      start_url: "./",
+      display: "standalone",
+      background_color: "#0a0a0a",
+      theme_color: "#0a0a0a",
+      orientation: "portrait",
+      icons: [
+        { src: _genIcon(192), sizes: "192x192", type: "image/png", purpose: "any maskable" },
+        { src: _genIcon(512), sizes: "512x512", type: "image/png", purpose: "any maskable" }
+      ]
+    };
+    function _genIcon(size) {
+      const c = document.createElement('canvas');
+      c.width = c.height = size;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#0a0a0a';
+      ctx.fillRect(0, 0, size, size);
+      const r = size * 0.18;
+      ctx.beginPath();
+      ctx.roundRect(0, 0, size, size, r);
+      ctx.clip();
+      ctx.fillStyle = '#111';
+      ctx.fillRect(0, 0, size, size);
+      ctx.font = `800 ${size*0.32}px Syne,sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#f0f0f0';
+      ctx.fillText('Fin', size * 0.5, size * 0.38);
+      ctx.fillStyle = '#4ade80';
+      ctx.font = `800 ${size*0.28}px Space Mono,monospace`;
+      ctx.fillText('Control', size * 0.5, size * 0.65);
+      return c.toDataURL('image/png');
+    }
+    // Inyectar manifest dinámicamente
+    window.addEventListener('DOMContentLoaded', () => {
+      _manifest.icons[0].src = _genIcon(192);
+      _manifest.icons[1].src = _genIcon(512);
+      const blob = new Blob([JSON.stringify(_manifest)], {type:'application/json'});
+      const url  = URL.createObjectURL(blob);
+      const link = document.createElement('link');
+      link.rel = 'manifest'; link.href = url;
+      document.head.appendChild(link);
+    });
+  </script>
+
+  <!-- Apple touch icon inline -->
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      const icon = _genIcon(180);
+      const l = document.createElement('link');
+      l.rel = 'apple-touch-icon'; l.href = icon;
+      document.head.appendChild(l);
+      const l2 = document.createElement('link');
+      l2.rel = 'icon'; l2.type = 'image/png'; l2.href = icon;
+      document.head.appendChild(l2);
+    });
+  </script>
+
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
@@ -47,6 +120,8 @@
       font-family: 'Syne', sans-serif;
       min-height: 100vh;
       transition: background var(--transition), color var(--transition);
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
     }
 
     /* ── TOPBAR ── */
@@ -3369,6 +3444,78 @@ window.addEventListener('load', () => {
     try { intentarAutoLogin(); } catch(e) { /* Google script aún no cargó */ }
   }, 500);
 });
+
+// ══════════════════════════════════════
+// PWA — SERVICE WORKER (inline como blob)
+// ══════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  const swCode = `
+const CACHE = 'fincontrol-v1';
+const ASSETS = [
+  './',
+  'https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap'
+];
+
+self.addEventListener('install', e => {
+  e.waitUntil(
+    caches.open(CACHE).then(c => c.addAll(ASSETS).catch(() => {}))
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+    )
+  );
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', e => {
+  // Solo cachear GET, ignorar requests de Google API/Auth
+  if (e.request.method !== 'GET') return;
+  const url = e.request.url;
+  if (url.includes('googleapis.com') || url.includes('accounts.google.com')) return;
+
+  e.respondWith(
+    caches.match(e.request).then(cached => {
+      // Network first para el HTML principal, cache fallback para el resto
+      const fetchPromise = fetch(e.request)
+        .then(res => {
+          if (res && res.status === 200 && res.type !== 'opaque') {
+            const clone = res.clone();
+            caches.open(CACHE).then(c => c.put(e.request, clone));
+          }
+          return res;
+        })
+        .catch(() => cached);
+      return url.includes('index.html') || url.endsWith('/') || url.endsWith('/fincontrol')
+        ? fetchPromise
+        : (cached || fetchPromise);
+    })
+  );
+});
+  `;
+
+  const blob = new Blob([swCode], { type: 'application/javascript' });
+  const swUrl = URL.createObjectURL(blob);
+
+  navigator.serviceWorker.register(swUrl, { scope: './' })
+    .then(reg => {
+      console.log('[PWA] Service Worker registrado', reg.scope);
+      // Notificar si hay actualización disponible
+      reg.addEventListener('updatefound', () => {
+        const newSW = reg.installing;
+        newSW.addEventListener('statechange', () => {
+          if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+            toast('Nueva versión disponible — recarga para actualizar');
+          }
+        });
+      });
+    })
+    .catch(err => console.log('[PWA] SW error:', err));
+}
 </script>
 </body>
 </html>
