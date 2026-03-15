@@ -34,22 +34,35 @@
       const c = document.createElement('canvas');
       c.width = c.height = size;
       const ctx = c.getContext('2d');
-      ctx.fillStyle = '#0a0a0a';
-      ctx.fillRect(0, 0, size, size);
-      const r = size * 0.18;
+      // Fondo negro con esquinas redondeadas
+      const r = size * 0.2;
       ctx.beginPath();
-      ctx.roundRect(0, 0, size, size, r);
-      ctx.clip();
-      ctx.fillStyle = '#111';
-      ctx.fillRect(0, 0, size, size);
-      ctx.font = `800 ${size*0.32}px Syne,sans-serif`;
+      ctx.moveTo(r, 0);
+      ctx.lineTo(size - r, 0);
+      ctx.quadraticCurveTo(size, 0, size, r);
+      ctx.lineTo(size, size - r);
+      ctx.quadraticCurveTo(size, size, size - r, size);
+      ctx.lineTo(r, size);
+      ctx.quadraticCurveTo(0, size, 0, size - r);
+      ctx.lineTo(0, r);
+      ctx.quadraticCurveTo(0, 0, r, 0);
+      ctx.closePath();
+      ctx.fillStyle = '#111111';
+      ctx.fill();
+      // "FC" grande en blanco — centro superior
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#f0f0f0';
-      ctx.fillText('Fin', size * 0.5, size * 0.38);
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `900 ${size * 0.38}px Arial Black,Arial,sans-serif`;
+      ctx.fillText('FC', size * 0.5, size * 0.52);
+      // Línea separadora verde
+      const lw = size * 0.5;
       ctx.fillStyle = '#4ade80';
-      ctx.font = `800 ${size*0.28}px Space Mono,monospace`;
-      ctx.fillText('Control', size * 0.5, size * 0.65);
+      ctx.fillRect((size - lw) / 2, size * 0.58, lw, size * 0.025);
+      // "FinControl" pequeño en verde abajo
+      ctx.fillStyle = '#4ade80';
+      ctx.font = `700 ${size * 0.13}px Arial,sans-serif`;
+      ctx.fillText('FinControl', size * 0.5, size * 0.78);
       return c.toDataURL('image/png');
     }
     // Inyectar manifest dinámicamente
@@ -530,7 +543,8 @@
       #tarjetas-container .cards-grid { grid-template-columns: 1fr; }
     }
 
-    /* ── TOAST ── */
+    #banner-nomina { animation: fadeIn 0.4s ease; }
+    #banner-nomina.visible { display: block !important; }
     .toast {
       position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px);
       background: var(--text); color: var(--bg);
@@ -643,6 +657,23 @@
       <div class="section-header">
         <div class="section-title">Resumen</div>
         <div class="section-subtitle" id="dashboard-date">Cargando fecha…</div>
+      </div>
+
+      <!-- Banner recordatorio nómina -->
+      <div id="banner-nomina" style="display:none;background:linear-gradient(135deg,rgba(251,191,36,0.12),rgba(251,191,36,0.06));border:1px solid rgba(251,191,36,0.35);border-radius:12px;padding:14px 16px;margin-bottom:20px;display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:20px">💰</span>
+            <div>
+              <div style="font-size:14px;font-weight:700;color:var(--yellow)">¡Día de nómina!</div>
+              <div style="font-size:12px;color:var(--text2)" id="banner-nomina-sub">No has registrado el depósito de hoy</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="abrirModalNomina()" style="background:var(--yellow);color:#000">Registrar depósito</button>
+            <button class="btn btn-outline btn-sm" onclick="posponerBannerNomina()">Después</button>
+          </div>
+        </div>
       </div>
 
       <!-- Summary cards -->
@@ -1658,6 +1689,7 @@ function renderDashboard() {
   if (subLibre) subLibre.textContent = 'Saldo − gastos pendientes';
 
   // Últimos 5 movimientos
+  actualizarBannerNomina();
   const allMov = getMovimientosAll().slice(-5).reverse();
   const tbody = document.getElementById('dash-movimientos');
   if (!allMov.length) {
@@ -2975,15 +3007,70 @@ function esDiaDeDeposito() {
   return false;
 }
 
+function abrirModalNomina() {
+  document.getElementById('modal-nomina').classList.add('open');
+}
+
+function posponerBannerNomina() {
+  // Posponer hasta mañana
+  state.lastNominaPrompt = today();
+  saveState();
+  document.getElementById('banner-nomina').classList.remove('visible');
+  toast('Te recordaremos mañana');
+}
+
+function actualizarBannerNomina() {
+  const banner = document.getElementById('banner-nomina');
+  if (!banner) return;
+  const { frecuencia, dia, tipoNomina, nomina } = state.debito;
+  if (!frecuencia || !dia) { banner.classList.remove('visible'); return; }
+
+  // Ver si hoy es día de depósito (o viernes ajustado)
+  const hoy = today();
+  const yaDeposito = state.movDebito.some(m => m.fecha === hoy && m.tipo === 'deposito' && m.esNomina);
+  if (yaDeposito) { banner.classList.remove('visible'); return; }
+
+  // Calcular si estamos en día de depósito (considerando ajuste fin de semana)
+  const fechaHoy = new Date(); fechaHoy.setHours(0,0,0,0);
+  let esDia = false;
+
+  if (frecuencia === 'mensual') {
+    const orig = new Date(fechaHoy.getFullYear(), fechaHoy.getMonth(), dia);
+    const ajust = ajustarFinDeSemana(orig);
+    esDia = fechaHoy.getTime() === ajust.getTime();
+  } else if (frecuencia === 'quincenal') {
+    const d2 = dia + 15 > 28 ? 28 : dia + 15;
+    const a1 = ajustarFinDeSemana(new Date(fechaHoy.getFullYear(), fechaHoy.getMonth(), dia));
+    const a2 = ajustarFinDeSemana(new Date(fechaHoy.getFullYear(), fechaHoy.getMonth(), d2));
+    esDia = fechaHoy.getTime() === a1.getTime() || fechaHoy.getTime() === a2.getTime();
+  }
+
+  if (!esDia) { banner.classList.remove('visible'); return; }
+
+  // Pospuesto hoy?
+  if (state.lastNominaPrompt === hoy) { banner.classList.remove('visible'); return; }
+
+  // Mostrar banner
+  const sub = document.getElementById('banner-nomina-sub');
+  if (sub) {
+    if (tipoNomina === 'variable') {
+      sub.textContent = 'Ingresa el monto que recibiste hoy';
+    } else {
+      sub.textContent = nomina ? `Se esperan ${fmt(nomina)} — confirma el depósito` : 'No has registrado el depósito de hoy';
+    }
+  }
+  banner.classList.add('visible');
+}
+
 function checkNominaVariable() {
+  actualizarBannerNomina();
+  // Modal solo para nómina variable (necesita ingresar monto)
+  if (state.debito.tipoNomina !== 'variable') return;
   if (!esDiaDeDeposito()) return;
   const hoy = today();
-  // Solo mostrar una vez por día
   if (state.lastNominaPrompt === hoy) return;
-  // Verificar que no haya ya un depósito registrado hoy
   const yaDeposito = state.movDebito.some(m => m.fecha === hoy && m.tipo === 'deposito' && m.esNomina);
   if (yaDeposito) return;
-  // Abrir modal después de un pequeño delay para que cargue la UI
   setTimeout(() => {
     document.getElementById('modal-nomina').classList.add('open');
   }, 800);
@@ -2991,28 +3078,27 @@ function checkNominaVariable() {
 
 function confirmarNomina() {
   const monto = parseFloat(document.getElementById('modal-nomina-monto').value);
-  const desc = document.getElementById('modal-nomina-desc').value.trim() || 'Depósito de nómina';
+  const desc  = document.getElementById('modal-nomina-desc').value.trim() || 'Depósito de nómina';
   if (!monto || monto <= 0) { toast('Ingresa un monto válido'); return; }
   const fecha = today();
   state.movDebito.push({ tipo: 'deposito', monto, desc, fecha, esNomina: true });
-  state.debito.saldo = (state.debito.saldo || 0) + monto;
-  state.debito.nomina = monto; // actualiza referencia para gastos fijos
+  state.debito.saldo  = (state.debito.saldo || 0) + monto;
+  state.debito.nomina = monto;
   state.lastNominaPrompt = fecha;
   saveState();
   document.getElementById('modal-nomina').classList.remove('open');
   document.getElementById('modal-nomina-monto').value = '';
-  document.getElementById('modal-nomina-desc').value = '';
-  renderDashboard();
-  renderDebito();
-  renderGastosFijos();
+  document.getElementById('modal-nomina-desc').value  = '';
+  document.getElementById('banner-nomina').classList.remove('visible');
+  renderDashboard(); renderDebito(); renderGastosFijos();
   toast('Nómina registrada ✓');
 }
 
 function posponerNomina() {
-  // Posponer: no volver a mostrar hoy
   state.lastNominaPrompt = today();
   saveState();
   document.getElementById('modal-nomina').classList.remove('open');
+  document.getElementById('banner-nomina').classList.remove('visible');
   toast('Te recordaremos mañana');
 }
 
