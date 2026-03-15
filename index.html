@@ -543,8 +543,8 @@
       #tarjetas-container .cards-grid { grid-template-columns: 1fr; }
     }
 
-    #banner-nomina { animation: fadeIn 0.4s ease; }
-    #banner-nomina.visible { display: block !important; }
+    #banner-nomina { display: none; animation: fadeIn 0.4s ease; }
+    #banner-nomina.visible { display: block; }
     .toast {
       position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px);
       background: var(--text); color: var(--bg);
@@ -664,7 +664,7 @@
       </div>
 
       <!-- Banner recordatorio nómina -->
-      <div id="banner-nomina" style="display:none;background:linear-gradient(135deg,rgba(251,191,36,0.12),rgba(251,191,36,0.06));border:1px solid rgba(251,191,36,0.35);border-radius:12px;padding:14px 16px;margin-bottom:20px;display:none">
+      <div id="banner-nomina" style="background:linear-gradient(135deg,rgba(251,191,36,0.12),rgba(251,191,36,0.06));border:1px solid rgba(251,191,36,0.35);border-radius:12px;padding:14px 16px;margin-bottom:20px">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
           <div style="display:flex;align-items:center;gap:10px">
             <span style="font-size:20px">💰</span>
@@ -3014,20 +3014,25 @@ function abrirModalNomina() {
 }
 
 function posponerBannerNomina() {
-  // Posponer hasta mañana
   state.lastNominaPrompt = today();
   saveState();
-  document.getElementById('banner-nomina').classList.remove('visible');
+  document.getElementById('banner-nomina').style.display = 'none';
   toast('Te recordaremos mañana');
 }
 
 function actualizarBannerNomina() {
   const banner = document.getElementById('banner-nomina');
+  if (!banner) return;
+  const hide = () => { banner.style.display = 'none'; };
+  const show = () => { banner.style.display = 'block'; };
+
   const { frecuencia, dia, tipoNomina, nomina } = state.debito;
+  if (!frecuencia || !dia) { hide(); return; }
 
   const fechaHoy = new Date(); fechaHoy.setHours(0,0,0,0);
   const hoy = today();
 
+  // Calcular fecha real de depósito de este ciclo
   let fechaDeposito = null;
   if (frecuencia === 'mensual') {
     fechaDeposito = ajustarFinDeSemana(new Date(fechaHoy.getFullYear(), fechaHoy.getMonth(), dia));
@@ -3040,24 +3045,31 @@ function actualizarBannerNomina() {
     else fechaDeposito = ajustarFinDeSemana(new Date(fechaHoy.getFullYear(), fechaHoy.getMonth() - 1, d2));
   }
 
+  // Si el día de depósito aún no llegó → ocultar
+  if (!fechaDeposito || fechaHoy < fechaDeposito) { hide(); return; }
 
-  if (!fechaDeposito) { banner.classList.remove('visible'); return; }
-
+  // Si ya hay depósito registrado desde ese día → ocultar
   const fechaDepStr = fechaDeposito.toISOString().split('T')[0];
-  const depositos = state.movDebito.filter(m => m.tipo === 'deposito' && m.esNomina && m.fecha >= fechaDepStr);
+  const yaDeposito = state.movDebito.some(m => m.tipo === 'deposito' && m.esNomina && m.fecha >= fechaDepStr);
+  if (yaDeposito) { hide(); return; }
 
+  // Si pospuesto hoy → ocultar
+  if (state.lastNominaPrompt === hoy) { hide(); return; }
 
+  // Mostrar con mensaje apropiado
   const diasRetraso = Math.floor((fechaHoy - fechaDeposito) / 86400000);
   const sub = document.getElementById('banner-nomina-sub');
   if (sub) {
     if (tipoNomina === 'variable') {
-      sub.textContent = diasRetraso === 0 ? 'No has registrado el depósito de hoy' : `Sin registrar hace ${diasRetraso} día${diasRetraso > 1 ? 's' : ''}`;
+      sub.textContent = diasRetraso === 0
+        ? 'No has registrado el depósito de hoy'
+        : `Sin registrar hace ${diasRetraso} día${diasRetraso > 1 ? 's' : ''}`;
     } else {
       const base = nomina ? `Se esperan ${fmt(nomina)}` : 'No has registrado el depósito';
       sub.textContent = diasRetraso === 0 ? base + ' hoy' : `${base} — hace ${diasRetraso} día${diasRetraso > 1 ? 's' : ''}`;
     }
   }
-  banner.classList.add('visible');
+  show();
 }
 
 function checkNominaVariable() {
@@ -3094,7 +3106,8 @@ function confirmarNomina() {
   document.getElementById('modal-nomina').classList.remove('open');
   document.getElementById('modal-nomina-monto').value = '';
   document.getElementById('modal-nomina-desc').value  = '';
-  document.getElementById('banner-nomina').classList.remove('visible');
+  const bannerEl = document.getElementById('banner-nomina');
+  if (bannerEl) { bannerEl.style.display = 'none'; }
   renderDashboard(); renderDebito(); renderGastosFijos();
   toast('Nómina registrada ✓');
 }
@@ -3103,7 +3116,7 @@ function posponerNomina() {
   state.lastNominaPrompt = today();
   saveState();
   document.getElementById('modal-nomina').classList.remove('open');
-  document.getElementById('banner-nomina').classList.remove('visible');
+  document.getElementById('banner-nomina').style.display = 'none';
   toast('Te recordaremos mañana');
 }
 
