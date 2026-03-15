@@ -3169,15 +3169,21 @@ function iniciarSesionGoogle(prompt = 'select_account') {
       const expiry = Date.now() + 8 * 60 * 60 * 1000;
       localStorage.setItem('fc_token', accessToken);
       localStorage.setItem('fc_token_expiry', expiry);
-      // Solo llamar getUserInfo si no tenemos el nombre ya guardado
-      if (!localStorage.getItem('fc_user_name')) {
-        await getUserInfo();
+      // Mostrar nombre guardado inmediatamente si existe
+      const nombreGuardado = localStorage.getItem('fc_user_name');
+      if (nombreGuardado) {
+        document.getElementById('user-name-text').textContent = nombreGuardado;
+        document.getElementById('user-chip').style.display = 'flex';
       } else {
-        // Restaurar nombre desde localStorage
-        const nombre = localStorage.getItem('fc_user_name');
-        document.getElementById('user-name-text').textContent = nombre;
+        // Primer login — guardar email como fallback y mostrar chip
+        const email = localStorage.getItem('fc_user_email') || '';
+        const fallback = email.split('@')[0] || 'Usuario';
+        localStorage.setItem('fc_user_name', fallback);
+        document.getElementById('user-name-text').textContent = fallback;
         document.getElementById('user-chip').style.display = 'flex';
       }
+      // Intentar obtener info fresca de Google en background
+      getUserInfo().catch(() => {});
       document.getElementById('login-screen').classList.add('hidden');
       setSyncState('syncing', 'Sincronizando…');
       await initSheet();
@@ -3190,33 +3196,39 @@ function iniciarSesionGoogle(prompt = 'select_account') {
   tokenClient.requestAccessToken();
 }
 
+// ── Mostrar chip de usuario con datos guardados
+function mostrarChipUsuario() {
+  const nombre = localStorage.getItem('fc_user_name');
+  if (!nombre) return;
+  document.getElementById('user-name-text').textContent = nombre;
+  document.getElementById('user-chip').style.display = 'flex';
+}
+
 // ── Auto-login: muestra la app con datos locales inmediatamente, sincroniza en background
 function intentarAutoLogin() {
-  const token       = localStorage.getItem('fc_token');
-  const expiry      = parseInt(localStorage.getItem('fc_token_expiry') || '0');
-  const savedEmail  = localStorage.getItem('fc_user_email');
-  const savedName   = localStorage.getItem('fc_user_initials');
+  const token      = localStorage.getItem('fc_token');
+  const expiry     = parseInt(localStorage.getItem('fc_token_expiry') || '0');
+  const savedEmail = localStorage.getItem('fc_user_email');
 
-  // Si hay datos guardados localmente → mostrar app de inmediato sin esperar a Google
+  // Si hay datos guardados → mostrar app y chip de inmediato
   if (savedEmail) {
     document.getElementById('login-screen').classList.add('hidden');
+    mostrarChipUsuario();
     renderDashboard();
   }
 
   if (token && Date.now() < expiry) {
-    // Token válido → sincronizar en segundo plano silenciosamente
+    // Token válido → sincronizar en background
     accessToken = token;
-    getUserInfo().then(async () => {
-      setSyncState('syncing', 'Sincronizando…');
-      await initSheet();
-      await loadFromSheet();
+    setSyncState('syncing', 'Sincronizando…');
+    initSheet().then(() => loadFromSheet()).then(() => {
       setSyncState('synced', 'Sincronizado');
       renderDashboard();
       checkNominaVariable();
-    }).catch(() => setSyncState('error', 'Sin conexión'));
+    }).catch(() => setSyncState('error', 'Error al sincronizar'));
 
   } else if (savedEmail) {
-    // Token expirado → renovar silenciosamente en background
+    // Token expirado → renovar silenciosamente
     try {
       tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
@@ -3224,16 +3236,10 @@ function intentarAutoLogin() {
         prompt: '',
         hint: savedEmail,
         callback: async (resp) => {
-          if (resp.error) {
-            setSyncState('', 'Datos locales');
-            return;
-          }
+          if (resp.error) { setSyncState('', 'Datos locales'); return; }
           accessToken = resp.access_token;
-          // Extender expiración a 8 horas desde ahora
-          const newExpiry = Date.now() + 8 * 60 * 60 * 1000;
           localStorage.setItem('fc_token', accessToken);
-          localStorage.setItem('fc_token_expiry', newExpiry);
-          await getUserInfo();
+          localStorage.setItem('fc_token_expiry', Date.now() + 8 * 60 * 60 * 1000);
           setSyncState('syncing', 'Sincronizando…');
           await initSheet();
           await loadFromSheet();
@@ -3243,11 +3249,9 @@ function intentarAutoLogin() {
         }
       });
       tokenClient.requestAccessToken();
-    } catch(e) {
-      setSyncState('', 'Datos locales');
-    }
+    } catch(e) { setSyncState('', 'Datos locales'); }
   }
-  // Si no hay nada → se queda en pantalla de login
+  // Sin datos guardados → se queda en pantalla de login
 }
 
 // ── Info del usuario (con retry si el token aún no está activo)
@@ -3587,14 +3591,7 @@ procesarDomiciliados();
 renderDashboard();
 
 // Restaurar chip de usuario con datos guardados mientras carga
-const savedName     = localStorage.getItem('fc_user_name');
-const savedInitials = localStorage.getItem('fc_user_initials');
-if (savedName) {
-  const initials = savedInitials || savedName.split(' ').map(p=>p[0]).join('').toUpperCase().slice(0,2) || '?';
-  document.getElementById('user-name-text').textContent = savedName;
-  
-  document.getElementById('user-chip').style.display = 'flex';
-}
+mostrarChipUsuario();
 
 // Intentar auto-login cuando cargue el script de Google
 window.addEventListener('load', () => {
