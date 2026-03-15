@@ -3386,6 +3386,10 @@ async function ensureHeaders() {
 
 // ── Cargar todo desde Sheets al state
 async function loadFromSheet() {
+  // Si no hay token válido, usar datos locales — no sobreescribir
+  if (!accessToken) return;
+  const expiry = parseInt(localStorage.getItem('fc_token_expiry') || '0');
+  if (Date.now() > expiry) return;
   try {
     // Una sola llamada para leer todo
     const ranges = ['Config!A:B','MovDebito!A:E','Tarjetas!A:E','Cargos!A:L','GastosFijos!A:H','Domiciliados!A:E','Metas!A:G','MovAhorro!A:F'];
@@ -3483,8 +3487,9 @@ async function saveToSheet() {
   if (!accessToken) { saveState(); return; }
   const expiry = parseInt(localStorage.getItem('fc_token_expiry') || '0');
   if (Date.now() > expiry) {
-    setSyncState('error', 'Sesión expirada');
-    intentarAutoLogin();
+    // Token expirado — guardar solo en localStorage, no perder datos
+    localStorage.setItem('fincontrol_state', JSON.stringify(state));
+    setSyncState('', 'Sin sesión — datos guardados localmente');
     return;
   }
   setSyncState('syncing', 'Guardando…');
@@ -3639,16 +3644,70 @@ window.addEventListener('load', () => {
 });
 
 // ══════════════════════════════════════
+// RECUPERACIÓN AL VOLVER AL FRENTE (PWA)
+// ══════════════════════════════════════
+let _ultimaSincronizacion = Date.now();
+
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible') return;
+
+  const ahora      = Date.now();
+  const minutos    = (ahora - _ultimaSincronizacion) / 60000;
+  const token      = localStorage.getItem('fc_token');
+  const expiry     = parseInt(localStorage.getItem('fc_token_expiry') || '0');
+  const tokenOk    = token && ahora < expiry;
+
+  // Si estuvo en background más de 2 minutos, verificar estado
+  if (minutos < 2) return;
+  _ultimaSincronizacion = ahora;
+
+  if (tokenOk && accessToken) {
+    // Token válido — sincronizar cambios pendientes silenciosamente
+    setSyncState('syncing', 'Actualizando…');
+    try {
+      await loadFromSheet();
+      setSyncState('synced', 'Sincronizado');
+      renderDashboard();
+    } catch(e) { setSyncState('error', 'Error al actualizar'); }
+
+  } else if (localStorage.getItem('fc_user_email')) {
+    // Token expirado — renovar silenciosamente sin mostrar login
+    setSyncState('syncing', 'Renovando sesión…');
+    try {
+      const savedEmail = localStorage.getItem('fc_user_email');
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        prompt: '',
+        hint: savedEmail,
+        callback: async (resp) => {
+          if (resp.error) { setSyncState('error', 'Sesión expirada — recarga'); return; }
+          accessToken = resp.access_token;
+          localStorage.setItem('fc_token',        accessToken);
+          localStorage.setItem('fc_token_expiry', Date.now() + 8 * 60 * 60 * 1000);
+          // Guardar cualquier cambio local pendiente primero
+          await saveToSheet();
+          // Luego cargar para sincronizar
+          await loadFromSheet();
+          setSyncState('synced', 'Sincronizado');
+          renderDashboard();
+        }
+      });
+      tokenClient.requestAccessToken();
+    } catch(e) { setSyncState('error', 'Sin conexión'); }
+  }
+});
+
+// ══════════════════════════════════════
 // PWA — SERVICE WORKER (inline como blob)
 // ══════════════════════════════════════
 if ('serviceWorker' in navigator) {
-  // Registrar SW desde un script inline via data URL — compatible con GitHub Pages
   const swCode = `const CACHE='fincontrol-v2';self.addEventListener('install',e=>{self.skipWaiting()});self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim()});self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const u=e.request.url;if(u.includes('googleapis.com')||u.includes('accounts.google.com'))return;e.respondWith(caches.match(e.request).then(cached=>{const fp=fetch(e.request).then(res=>{if(res&&res.status===200&&res.type!=='opaque'){const cl=res.clone();caches.open(CACHE).then(c=>c.put(e.request,cl))}return res}).catch(()=>cached);return cached||fp}))});`;
   const swBlob = new Blob([swCode], {type: 'text/javascript'});
   const swUrl  = URL.createObjectURL(swBlob);
   navigator.serviceWorker.register(swUrl)
     .then(() => console.log('[PWA] Service Worker registrado'))
-    .catch(() => {}); // silenciar error en GitHub Pages
+    .catch(() => {});
 }
 </script>
 </body>
