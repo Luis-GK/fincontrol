@@ -1163,6 +1163,12 @@
             </select>
           </div>
         </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Descripción (opcional)</label>
+            <input class="form-input" type="text" id="libre-desc" placeholder="Ej: Fondo de emergencia en CETES 28 días…"/>
+          </div>
+        </div>
         <button class="btn btn-primary" onclick="agregarAhorroLibre()">Crear ahorro libre</button>
       </div>
       <div class="panel">
@@ -2184,11 +2190,13 @@ const colorMap = { green: 'var(--green)', blue: 'var(--blue)', yellow: 'var(--ye
 function agregarAhorroLibre() {
   const nombre = document.getElementById('libre-nombre').value.trim();
   const icono  = document.getElementById('libre-icono').value;
+  const desc   = document.getElementById('libre-desc').value.trim();
   if (!nombre) { toast('Escribe un nombre'); return; }
   if (!state.ahorrosLibres) state.ahorrosLibres = [];
-  state.ahorrosLibres.push({ id: Date.now().toString(), nombre, icono, saldo: 0 });
+  state.ahorrosLibres.push({ id: Date.now().toString(), nombre, icono, desc, saldo: 0 });
   saveState();
   document.getElementById('libre-nombre').value = '';
+  document.getElementById('libre-desc').value   = '';
   renderAhorro();
   toast('Ahorro libre creado ✓');
 }
@@ -2352,18 +2360,42 @@ function renderAhorro() {
     return;
   }
 
-  // Ahorros libres panels
+  // Panel de desglose de ahorros libres (si hay más de uno)
+  const desgloseHtml = (state.ahorrosLibres||[]).length > 1 ? `
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-title"><div class="dot"></div>Ahorros libres — desglose</div>
+      <div style="display:flex;flex-direction:column;gap:0">
+        ${(state.ahorrosLibres||[]).map(acc => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border)">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:20px">${acc.icono}</span>
+              <div>
+                <div style="font-weight:700;font-size:14px">${acc.nombre}</div>
+                ${acc.desc ? `<div style="font-size:12px;color:var(--text2)">${acc.desc}</div>` : ''}
+              </div>
+            </div>
+            <div style="font-weight:800;font-size:16px;color:var(--blue)">${fmt(acc.saldo||0)}</div>
+          </div>`).join('')}
+        <div style="display:flex;justify-content:space-between;padding:10px 0;font-weight:800">
+          <span style="color:var(--text2);font-size:13px">TOTAL LIBRE</span>
+          <span style="color:var(--blue);font-size:16px">${fmt(saldoLibre)}</span>
+        </div>
+      </div>
+    </div>` : '';
+
+  // Ahorros libres — panel individual por cuenta
   const libresHtml = (state.ahorrosLibres||[]).map(acc => {
     const movs = state.movAhorro.filter(m => m.metaId === acc.id).slice(-5).reverse();
     return `<div class="panel" style="border-left:3px solid var(--blue);margin-bottom:16px">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px">
         <div>
-          <div style="font-size:22px;margin-bottom:2px">${acc.icono}</div>
+          <div style="font-size:22px;margin-bottom:4px">${acc.icono}</div>
           <div style="font-size:18px;font-weight:800">${acc.nombre}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:2px;font-family:'Space Mono',monospace;letter-spacing:1px">AHORRO LIBRE</div>
+          <div style="font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:1px;margin-top:2px">AHORRO LIBRE</div>
+          ${acc.desc ? `<div style="font-size:13px;color:var(--text2);margin-top:6px;max-width:280px">${acc.desc}</div>` : ''}
         </div>
         <div style="text-align:right">
-          <div style="font-size:26px;font-weight:800;color:var(--blue)">${fmt(acc.saldo||0)}</div>
+          <div style="font-size:28px;font-weight:800;color:var(--blue)">${fmt(acc.saldo||0)}</div>
           <div style="font-size:12px;color:var(--text2)">disponible</div>
         </div>
       </div>
@@ -2378,12 +2410,12 @@ function renderAhorro() {
               <span style="font-weight:700;color:${mv.tipo==='retiro'?'var(--red)':'var(--green)'}">${mv.tipo==='retiro'?'-':'+'}${fmt(mv.monto)}</span>
             </span>
           </div>`).join('')}
-      </div>` : ''}
+      </div>` : `<div style="font-size:13px;color:var(--text3);margin-bottom:12px">Sin movimientos aún</div>`}
       <button class="btn btn-danger btn-sm" onclick="eliminarAhorroLibre('${acc.id}')">✕ Eliminar</button>
     </div>`;
   }).join('');
 
-  cont.innerHTML = libresHtml + state.metas.map(meta => {
+  cont.innerHTML = desgloseHtml + libresHtml + state.metas.map(meta => {
     const saldo    = meta.saldo || 0;
     const pct      = Math.min(100, Math.round((saldo / meta.objetivo) * 100));
     const color    = colorMap[meta.color] || 'var(--green)';
