@@ -1072,7 +1072,12 @@
         <div class="card">
           <div class="card-label">TOTAL AHORRADO</div>
           <div class="card-value green" id="ahorro-total">$0.00</div>
-          <div class="card-sub">Suma de todas las metas</div>
+          <div class="card-sub">Metas + ahorro libre</div>
+        </div>
+        <div class="card">
+          <div class="card-label">AHORRO LIBRE</div>
+          <div class="card-value blue" id="ahorro-libre-saldo">$0.00</div>
+          <div class="card-sub">Sin meta asignada</div>
         </div>
         <div class="card">
           <div class="card-label">RENDIMIENTOS ACUMULADOS</div>
@@ -1137,13 +1142,20 @@
         <button class="btn btn-primary" onclick="agregarMeta()">Crear meta</button>
       </div>
 
-      <!-- Transferencia débito → ahorro -->
+      <!-- Transferencia débito ↔ ahorro -->
       <div class="panel">
-        <div class="panel-title"><div class="dot"></div>Transferir a ahorro</div>
+        <div class="panel-title"><div class="dot"></div>Transferir</div>
+        <!-- Toggle dirección -->
+        <div style="display:flex;gap:0;margin-bottom:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+          <button id="btn-deposito" class="btn btn-primary" style="flex:1;border-radius:0;border:none;justify-content:center" onclick="setDireccion('deposito')">↓ Débito → Ahorro</button>
+          <button id="btn-retiro"   class="btn btn-outline" style="flex:1;border-radius:0;border:none;border-left:1px solid var(--border);justify-content:center" onclick="setDireccion('retiro')">↑ Ahorro → Débito</button>
+        </div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Meta destino</label>
-            <select class="form-select" id="transf-meta"></select>
+            <label class="form-label">Destino</label>
+            <select class="form-select" id="transf-meta">
+              <option value="__libre__">💰 Ahorro libre</option>
+            </select>
           </div>
           <div class="form-group">
             <label class="form-label">Monto</label>
@@ -1160,10 +1172,7 @@
             <input class="form-input" type="text" id="transf-nota" placeholder="Ej: Ahorro quincena marzo"/>
           </div>
         </div>
-        <div style="display:flex;gap:12px;flex-wrap:wrap">
-          <button class="btn btn-primary" onclick="transferirAhorro('deposito')">↓ Débito → Ahorro</button>
-          <button class="btn btn-outline" onclick="transferirAhorro('retiro')">↑ Ahorro → Débito</button>
-        </div>
+        <button class="btn btn-primary" id="btn-transferir" onclick="transferirAhorro()" style="width:100%;justify-content:center">↓ Transferir a ahorro</button>
       </div>
 
       <!-- Rendimiento / interés -->
@@ -1352,6 +1361,7 @@ let state = {
   domiciliados: [], // pagos automáticos mensuales en tarjeta
   metas: [],        // metas de ahorro
   movAhorro: [],    // historial de movimientos de ahorro
+  ahorroLibre: 0,   // saldo de ahorro sin meta asignada
   gastosFijos: [],
   movDebito: [],
   lastNominaPrompt: null,
@@ -2173,33 +2183,59 @@ function eliminarMeta(id) {
   toast('Meta eliminada');
 }
 
-function transferirAhorro(tipo) {
+let _transfDireccion = 'deposito';
+
+function setDireccion(dir) {
+  _transfDireccion = dir;
+  const btnDep = document.getElementById('btn-deposito');
+  const btnRet = document.getElementById('btn-retiro');
+  const btnTr  = document.getElementById('btn-transferir');
+  if (dir === 'deposito') {
+    btnDep.className = 'btn btn-primary'; btnDep.style.cssText = 'flex:1;border-radius:0;border:none;justify-content:center';
+    btnRet.className = 'btn btn-outline'; btnRet.style.cssText = 'flex:1;border-radius:0;border:none;border-left:1px solid var(--border);justify-content:center';
+    btnTr.textContent = '↓ Transferir a ahorro';
+  } else {
+    btnRet.className = 'btn btn-primary'; btnRet.style.cssText = 'flex:1;border-radius:0;border:none;border-left:1px solid var(--border);justify-content:center';
+    btnDep.className = 'btn btn-outline'; btnDep.style.cssText = 'flex:1;border-radius:0;border:none;justify-content:center';
+    btnTr.textContent = '↑ Retirar de ahorro';
+  }
+}
+
+function transferirAhorro() {
+  const tipo   = _transfDireccion;
   const metaId = document.getElementById('transf-meta').value;
   const monto  = parseFloat(document.getElementById('transf-monto').value) || 0;
   const fecha  = document.getElementById('transf-fecha').value || today();
   const nota   = document.getElementById('transf-nota').value.trim() || (tipo === 'deposito' ? 'Transferencia a ahorro' : 'Retiro de ahorro');
-  if (!metaId) { toast('Selecciona una meta'); return; }
   if (!monto || monto <= 0) { toast('Ingresa un monto válido'); return; }
-  const meta = state.metas.find(m => m.id === metaId);
-  if (!meta) return;
+
+  const esLibre = metaId === '__libre__';
+  const meta    = !esLibre ? state.metas.find(m => m.id === metaId) : null;
+  if (!esLibre && !meta) { toast('Selecciona una meta'); return; }
+
   if (tipo === 'deposito') {
     if (state.debito.saldo < monto) { toast('Saldo insuficiente en débito'); return; }
-    meta.saldo = (meta.saldo || 0) + monto;
     state.debito.saldo -= monto;
-    state.movDebito.push({ tipo: 'gasto', monto, desc: `Ahorro: ${meta.icono} ${meta.nombre}`, fecha, esNomina: false });
+    if (esLibre) { state.ahorroLibre = (state.ahorroLibre || 0) + monto; }
+    else { meta.saldo = (meta.saldo || 0) + monto; }
+    state.movDebito.push({ tipo: 'gasto', monto, desc: `Ahorro: ${esLibre ? '💰 Libre' : meta.icono + ' ' + meta.nombre}`, fecha, esNomina: false });
   } else {
-    if ((meta.saldo || 0) < monto) { toast('Saldo insuficiente en esta meta'); return; }
-    meta.saldo = (meta.saldo || 0) - monto;
+    const saldoDisp = esLibre ? (state.ahorroLibre || 0) : (meta.saldo || 0);
+    if (saldoDisp < monto) { toast('Saldo insuficiente en ahorro'); return; }
+    if (esLibre) { state.ahorroLibre = (state.ahorroLibre || 0) - monto; }
+    else { meta.saldo = (meta.saldo || 0) - monto; }
     state.debito.saldo += monto;
-    state.movDebito.push({ tipo: 'deposito', monto, desc: `Retiro ahorro: ${meta.icono} ${meta.nombre}`, fecha, esNomina: false });
+    state.movDebito.push({ tipo: 'deposito', monto, desc: `Retiro ahorro: ${esLibre ? '💰 Libre' : meta.icono + ' ' + meta.nombre}`, fecha, esNomina: false });
   }
+
   if (!state.movAhorro) state.movAhorro = [];
   state.movAhorro.push({ id: Date.now().toString(), metaId, tipo, monto, fecha, nota });
   saveState();
   document.getElementById('transf-monto').value = '';
-  document.getElementById('transf-nota').value = '';
+  document.getElementById('transf-nota').value  = '';
   renderAhorro(); renderDashboard(); renderDebito();
-  toast(tipo === 'deposito' ? `+${fmt(monto)} a ${meta.nombre} ✓` : `${fmt(monto)} retirado de ${meta.nombre} ✓`);
+  const nombre = esLibre ? 'Ahorro libre' : meta.nombre;
+  toast(tipo === 'deposito' ? `+${fmt(monto)} a ${nombre} ✓` : `${fmt(monto)} retirado de ${nombre} ✓`);
 }
 
 function registrarRendimiento() {
@@ -2207,16 +2243,20 @@ function registrarRendimiento() {
   const monto  = parseFloat(document.getElementById('rend-monto').value) || 0;
   const fecha  = document.getElementById('rend-fecha').value || today();
   const desc   = document.getElementById('rend-desc').value.trim() || 'Rendimiento';
-  if (!metaId) { toast('Selecciona una meta'); return; }
   if (!monto || monto <= 0) { toast('Ingresa un monto válido'); return; }
-  const meta = state.metas.find(m => m.id === metaId);
-  if (!meta) return;
-  meta.saldo = (meta.saldo || 0) + monto;
+
+  const esLibre = metaId === '__libre__';
+  const meta    = !esLibre ? state.metas.find(m => m.id === metaId) : null;
+  if (!esLibre && !meta) { toast('Selecciona una meta'); return; }
+
+  if (esLibre) { state.ahorroLibre = (state.ahorroLibre || 0) + monto; }
+  else { meta.saldo = (meta.saldo || 0) + monto; }
+
   if (!state.movAhorro) state.movAhorro = [];
   state.movAhorro.push({ id: Date.now().toString(), metaId, tipo: 'rendimiento', monto, fecha, nota: desc });
   saveState();
   document.getElementById('rend-monto').value = '';
-  document.getElementById('rend-desc').value = '';
+  document.getElementById('rend-desc').value  = '';
   renderAhorro(); renderDashboard();
   toast(`Rendimiento +${fmt(monto)} registrado ✓`);
 }
@@ -2226,18 +2266,21 @@ function renderAhorro() {
   if (!state.movAhorro) state.movAhorro = [];
 
   // Cards resumen
-  const totalAhorrado = state.metas.reduce((s, m) => s + (m.saldo || 0), 0);
+  const saldoLibre    = state.ahorroLibre || 0;
+  const totalMetas    = state.metas.reduce((s, m) => s + (m.saldo || 0), 0);
+  const totalAhorrado = totalMetas + saldoLibre;
   const totalRend     = state.movAhorro.filter(m => m.tipo === 'rendimiento').reduce((s, m) => s + m.monto, 0);
   const completadas   = state.metas.filter(m => (m.saldo || 0) >= m.objetivo).length;
   document.getElementById('ahorro-total').textContent        = fmt(totalAhorrado);
+  document.getElementById('ahorro-libre-saldo').textContent  = fmt(saldoLibre);
   document.getElementById('ahorro-rendimientos').textContent = fmt(totalRend);
   document.getElementById('ahorro-metas-count').textContent  = state.metas.filter(m => (m.saldo||0) < m.objetivo).length;
   document.getElementById('ahorro-completadas').textContent  = completadas;
 
-  // Poblar dropdowns
+  // Poblar dropdowns — siempre incluir opción libre primero
   ['transf-meta', 'rend-meta'].forEach(id => {
     const sel = document.getElementById(id);
-    sel.innerHTML = '<option value="">Seleccionar meta…</option>';
+    sel.innerHTML = '<option value="__libre__">💰 Ahorro libre</option>';
     state.metas.forEach(m => {
       const opt = document.createElement('option');
       opt.value = m.id;
@@ -2258,7 +2301,35 @@ function renderAhorro() {
     return;
   }
 
-  cont.innerHTML = state.metas.map(meta => {
+  // Ahorro libre panel + metas
+  const libreMovs = state.movAhorro.filter(m => m.metaId === '__libre__').slice(-5).reverse();
+  const libreHtml = `<div class="panel" style="border-left:3px solid var(--blue);margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-size:22px;margin-bottom:2px">💰</div>
+        <div style="font-size:18px;font-weight:800">Ahorro libre</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:2px">Sin meta asignada</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:26px;font-weight:800;color:var(--blue)">${fmt(saldoLibre)}</div>
+        <div style="font-size:12px;color:var(--text2)">disponible</div>
+      </div>
+    </div>
+    ${libreMovs.length ? `
+    <div style="font-size:11px;font-family:'Space Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Últimos movimientos</div>
+    <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">
+      ${libreMovs.map(mv => `
+        <div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border)">
+          <span style="color:var(--text2)">${mv.tipo === 'rendimiento' ? '📈' : mv.tipo === 'deposito' ? '↓' : '↑'} ${mv.nota}</span>
+          <span style="display:flex;gap:10px">
+            <span style="font-size:11px;color:var(--text3)">${mv.fecha}</span>
+            <span style="font-weight:700;color:${mv.tipo==='retiro'?'var(--red)':'var(--green)'}">${mv.tipo==='retiro'?'-':'+'}${fmt(mv.monto)}</span>
+          </span>
+        </div>`).join('')}
+    </div>` : ''}
+  </div>`;
+
+  cont.innerHTML = libreHtml + state.metas.map(meta => {
     const saldo    = meta.saldo || 0;
     const pct      = Math.min(100, Math.round((saldo / meta.objetivo) * 100));
     const color    = colorMap[meta.color] || 'var(--green)';
@@ -2901,6 +2972,7 @@ async function loadFromSheet() {
     state.debito.tipoNomina  = cfgMap['tipoNomina']             || 'fija';
     state.lastNominaPrompt   = cfgMap['lastNominaPrompt']       || null;
     try { state.gfPagos = JSON.parse(cfgMap['gfPagos'] || '{}'); } catch(e) { state.gfPagos = {}; }
+    state.ahorroLibre = parseFloat(cfgMap['ahorroLibre']) || 0;
 
     // MovDebito
     state.movDebito = (movData || []).slice(1).filter(r => r[0]).map(r => ({
@@ -2993,7 +3065,8 @@ async function saveToSheet() {
       ['nomina',           state.debito.nomina],
       ['tipoNomina',       state.debito.tipoNomina],
       ['lastNominaPrompt', state.lastNominaPrompt || ''],
-      ['gfPagos',          JSON.stringify(state.gfPagos || {})]
+      ['gfPagos',          JSON.stringify(state.gfPagos || {})],
+      ['ahorroLibre',      state.ahorroLibre || 0]
     ];
     const movRows = [['tipo','monto','desc','fecha','esNomina'],
       ...state.movDebito.map(m => [m.tipo, m.monto, m.desc, m.fecha, m.esNomina||false])];
@@ -3107,6 +3180,7 @@ initDateInputs();
 if (!state.domiciliados) state.domiciliados = [];
 if (!state.metas) state.metas = [];
 if (!state.movAhorro) state.movAhorro = [];
+if (state.ahorroLibre === undefined) state.ahorroLibre = 0;
 procesarDomiciliados();
 renderDashboard();
 
