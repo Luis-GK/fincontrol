@@ -2029,7 +2029,6 @@ function renderCredito() {
     const tipoLabel = c.tipo === 'contado' ? 'Contado' : c.tipo === 'msi' ? `MSI ${c.meses}m` : `MCI ${c.meses}m`;
     const restante      = calcRestanteCargo(c);
     const cuota         = (c.tipo === 'contado') ? c.total : Math.round((c.total / c.meses)*100)/100;
-    // "Cargo del mes" = cuántos cortes han pasado desde la compra (por fecha)
     const cargoDelMes   = calcMesesTranscurridos(c);
     const pagadoMostrar = c.pagado || 0;
     return `<tr>
@@ -2044,6 +2043,22 @@ function renderCredito() {
       <td><button class="btn btn-danger btn-sm" onclick="eliminarCargo(${i})">✕</button></td>
     </tr>`;
   }).join('');
+
+  // Fila de totales
+  const totalPagado   = state.cargos.reduce((s,c) => s + (c.pagado||0), 0);
+  const totalRestante = state.cargos.reduce((s,c) => s + calcRestanteCargo(c), 0);
+  const totalCuotas   = state.cargos.reduce((s,c) => {
+    if (c.tipo === 'contado') return s;
+    return s + Math.round((c.total / c.meses)*100)/100;
+  }, 0);
+  tbody.innerHTML += `<tr style="border-top:2px solid var(--border);background:var(--bg2)">
+    <td colspan="4" style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--text2);padding:10px 12px">TOTAL</td>
+    <td style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--yellow)">${fmt(totalCuotas)}</td>
+    <td style="color:var(--green);font-weight:700">${fmt(totalPagado)}</td>
+    <td></td>
+    <td style="color:var(--red);font-weight:800;font-size:14px">${fmt(totalRestante)}</td>
+    <td></td>
+  </tr>`;
 }
 
 function agregarCargo() {
