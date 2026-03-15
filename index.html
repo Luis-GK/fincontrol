@@ -592,10 +592,14 @@
       <div class="sync-dot" id="sync-dot"></div>
       <span id="sync-text">Sin conexión</span>
     </div>
-    <div class="user-chip" id="user-chip" style="display:none" onclick="cerrarSesion()" title="Cerrar sesión">
-      <div class="user-avatar" id="user-avatar-initials"></div>
-      <span class="user-name" id="user-name-text"></span>
-      <span class="logout-icon">⏻</span>
+    <div id="user-chip" style="display:none;align-items:center;gap:6px">
+      <span id="user-name-text" style="font-size:12px;font-weight:600;color:var(--text2);max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+      <button onclick="cerrarSesion()" title="Cerrar sesión"
+        style="background:transparent;border:1px solid var(--border);border-radius:8px;padding:5px 10px;cursor:pointer;font-size:12px;font-weight:700;color:var(--text2);font-family:'Syne',sans-serif;transition:all 0.2s"
+        onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'"
+        onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text2)'">
+        Salir
+      </button>
     </div>
     <button class="theme-toggle" onclick="toggleTheme()" title="Cambiar tema">☀</button>
   </div>
@@ -3023,38 +3027,53 @@ function actualizarBannerNomina() {
   const { frecuencia, dia, tipoNomina, nomina } = state.debito;
   if (!frecuencia || !dia) { banner.classList.remove('visible'); return; }
 
-  // Ver si hoy es día de depósito (o viernes ajustado)
-  const hoy = today();
-  const yaDeposito = state.movDebito.some(m => m.fecha === hoy && m.tipo === 'deposito' && m.esNomina);
-  if (yaDeposito) { banner.classList.remove('visible'); return; }
-
-  // Calcular si estamos en día de depósito (considerando ajuste fin de semana)
   const fechaHoy = new Date(); fechaHoy.setHours(0,0,0,0);
-  let esDia = false;
+  const hoy = today();
 
+  // Calcular la fecha real de depósito de este ciclo (ajustada por fin de semana)
+  let fechaDeposito = null;
   if (frecuencia === 'mensual') {
-    const orig = new Date(fechaHoy.getFullYear(), fechaHoy.getMonth(), dia);
-    const ajust = ajustarFinDeSemana(orig);
-    esDia = fechaHoy.getTime() === ajust.getTime();
+    fechaDeposito = ajustarFinDeSemana(new Date(fechaHoy.getFullYear(), fechaHoy.getMonth(), dia));
   } else if (frecuencia === 'quincenal') {
     const d2 = dia + 15 > 28 ? 28 : dia + 15;
     const a1 = ajustarFinDeSemana(new Date(fechaHoy.getFullYear(), fechaHoy.getMonth(), dia));
     const a2 = ajustarFinDeSemana(new Date(fechaHoy.getFullYear(), fechaHoy.getMonth(), d2));
-    esDia = fechaHoy.getTime() === a1.getTime() || fechaHoy.getTime() === a2.getTime();
+    // La más reciente que ya haya pasado o sea hoy
+    if (fechaHoy >= a2) fechaDeposito = a2;
+    else if (fechaHoy >= a1) fechaDeposito = a1;
+    else {
+      // Ambas son futuras este mes, tomar la del mes anterior
+      fechaDeposito = ajustarFinDeSemana(new Date(fechaHoy.getFullYear(), fechaHoy.getMonth() - 1, d2));
+    }
   }
 
-  if (!esDia) { banner.classList.remove('visible'); return; }
+  if (!fechaDeposito) { banner.classList.remove('visible'); return; }
 
-  // Pospuesto hoy?
+  // Si el día de depósito aún no llegó, no mostrar
+  if (fechaHoy < fechaDeposito) { banner.classList.remove('visible'); return; }
+
+  // Verificar si ya se registró la nómina en este ciclo
+  // Buscar cualquier depósito esNomina desde la fecha de depósito hasta hoy
+  const fechaDepStr = fechaDeposito.toISOString().split('T')[0];
+  const yaDeposito = state.movDebito.some(m =>
+    m.tipo === 'deposito' && m.esNomina && m.fecha >= fechaDepStr
+  );
+  if (yaDeposito) { banner.classList.remove('visible'); return; }
+
+  // Si el usuario pospuso HOY, no mostrar (pero sí mañana)
   if (state.lastNominaPrompt === hoy) { banner.classList.remove('visible'); return; }
 
-  // Mostrar banner
+  // Calcular días de retraso para el subtítulo
+  const diasRetraso = Math.floor((fechaHoy - fechaDeposito) / 86400000);
   const sub = document.getElementById('banner-nomina-sub');
   if (sub) {
     if (tipoNomina === 'variable') {
-      sub.textContent = 'Ingresa el monto que recibiste hoy';
+      sub.textContent = diasRetraso === 0
+        ? 'No has registrado el depósito de hoy'
+        : `Sin registrar hace ${diasRetraso} día${diasRetraso > 1 ? 's' : ''}`;
     } else {
-      sub.textContent = nomina ? `Se esperan ${fmt(nomina)} — confirma el depósito` : 'No has registrado el depósito de hoy';
+      const base = nomina ? `Se esperan ${fmt(nomina)}` : 'No has registrado el depósito';
+      sub.textContent = diasRetraso === 0 ? base + ' hoy' : `${base} — hace ${diasRetraso} día${diasRetraso > 1 ? 's' : ''}`;
     }
   }
   banner.classList.add('visible');
@@ -3216,7 +3235,7 @@ async function getUserInfo() {
     const nombre = currentUser.given_name || currentUser.name || '?';
     const iniciales = nombre.split(' ').map(p => p[0]).join('').toUpperCase().slice(0,2);
     localStorage.setItem('fc_user_initials', iniciales);
-    document.getElementById('user-avatar-initials').textContent = iniciales;
+    
     document.getElementById('user-name-text').textContent = nombre;
     document.getElementById('user-chip').style.display = 'flex';
   } catch(e) {}
@@ -3537,7 +3556,7 @@ const savedInitials = localStorage.getItem('fc_user_initials');
 if (savedName) {
   const initials = savedInitials || savedName.split(' ').map(p=>p[0]).join('').toUpperCase().slice(0,2) || '?';
   document.getElementById('user-name-text').textContent = savedName;
-  document.getElementById('user-avatar-initials').textContent = initials;
+  
   document.getElementById('user-chip').style.display = 'flex';
 }
 
