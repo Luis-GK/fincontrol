@@ -3023,9 +3023,52 @@ function posponerBannerNomina() {
 
 function actualizarBannerNomina() {
   const banner = document.getElementById('banner-nomina');
-  if (!banner) return;
+  if (!banner) { console.log('[Banner] No se encontró el elemento banner-nomina'); return; }
   const { frecuencia, dia, tipoNomina, nomina } = state.debito;
-  if (!frecuencia || !dia) { banner.classList.remove('visible'); return; }
+  console.log('[Banner] Config:', { frecuencia, dia, tipoNomina });
+  if (!frecuencia || !dia) { banner.classList.remove('visible'); console.log('[Banner] Sin frecuencia/dia configurado'); return; }
+
+  const fechaHoy = new Date(); fechaHoy.setHours(0,0,0,0);
+  const hoy = today();
+
+  let fechaDeposito = null;
+  if (frecuencia === 'mensual') {
+    fechaDeposito = ajustarFinDeSemana(new Date(fechaHoy.getFullYear(), fechaHoy.getMonth(), dia));
+  } else if (frecuencia === 'quincenal') {
+    const d2 = dia + 15 > 28 ? 28 : dia + 15;
+    const a1 = ajustarFinDeSemana(new Date(fechaHoy.getFullYear(), fechaHoy.getMonth(), dia));
+    const a2 = ajustarFinDeSemana(new Date(fechaHoy.getFullYear(), fechaHoy.getMonth(), d2));
+    if (fechaHoy >= a2) fechaDeposito = a2;
+    else if (fechaHoy >= a1) fechaDeposito = a1;
+    else fechaDeposito = ajustarFinDeSemana(new Date(fechaHoy.getFullYear(), fechaHoy.getMonth() - 1, d2));
+  }
+
+  console.log('[Banner] fechaDeposito calculada:', fechaDeposito?.toISOString().split('T')[0]);
+  console.log('[Banner] fechaHoy:', hoy, '| lastNominaPrompt:', state.lastNominaPrompt);
+
+  if (!fechaDeposito) { banner.classList.remove('visible'); return; }
+  if (fechaHoy < fechaDeposito) { console.log('[Banner] Aún no llega el día de depósito'); banner.classList.remove('visible'); return; }
+
+  const fechaDepStr = fechaDeposito.toISOString().split('T')[0];
+  const depositos = state.movDebito.filter(m => m.tipo === 'deposito' && m.esNomina && m.fecha >= fechaDepStr);
+  console.log('[Banner] Depósitos esNomina desde', fechaDepStr, ':', depositos);
+  if (depositos.length > 0) { banner.classList.remove('visible'); console.log('[Banner] Ya hay depósito registrado'); return; }
+
+  if (state.lastNominaPrompt === hoy) { banner.classList.remove('visible'); console.log('[Banner] Pospuesto hoy'); return; }
+
+  const diasRetraso = Math.floor((fechaHoy - fechaDeposito) / 86400000);
+  const sub = document.getElementById('banner-nomina-sub');
+  if (sub) {
+    if (tipoNomina === 'variable') {
+      sub.textContent = diasRetraso === 0 ? 'No has registrado el depósito de hoy' : `Sin registrar hace ${diasRetraso} día${diasRetraso > 1 ? 's' : ''}`;
+    } else {
+      const base = nomina ? `Se esperan ${fmt(nomina)}` : 'No has registrado el depósito';
+      sub.textContent = diasRetraso === 0 ? base + ' hoy' : `${base} — hace ${diasRetraso} día${diasRetraso > 1 ? 's' : ''}`;
+    }
+  }
+  console.log('[Banner] Mostrando banner, días retraso:', diasRetraso);
+  banner.classList.add('visible');
+}
 
   const fechaHoy = new Date(); fechaHoy.setHours(0,0,0,0);
   const hoy = today();
