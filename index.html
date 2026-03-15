@@ -3210,24 +3210,18 @@ function iniciarSesionGoogle(prompt = 'select_account') {
     callback: async (resp) => {
       if (resp.error) { setSyncState('error', 'Error de auth'); return; }
       accessToken = resp.access_token;
-      const expiry = Date.now() + 8 * 60 * 60 * 1000;
-      localStorage.setItem('fc_token', accessToken);
-      localStorage.setItem('fc_token_expiry', expiry);
-      // Mostrar nombre guardado inmediatamente si existe
-      const nombreGuardado = localStorage.getItem('fc_user_name');
-      if (nombreGuardado) {
-        
-        document.getElementById('user-chip').style.display = 'flex';
-      } else {
-        // Primer login — guardar email como fallback y mostrar chip
-        const email = localStorage.getItem('fc_user_email') || '';
-        const fallback = email.split('@')[0] || 'Usuario';
-        localStorage.setItem('fc_user_name', fallback);
-        
-        document.getElementById('user-chip').style.display = 'flex';
+      localStorage.setItem('fc_token',        accessToken);
+      localStorage.setItem('fc_token_expiry', Date.now() + 8 * 60 * 60 * 1000);
+      // Guardar un marcador de sesión activa SIEMPRE — esto es lo que permite el auto-login
+      if (!localStorage.getItem('fc_user_email')) {
+        localStorage.setItem('fc_user_email', 'sesion@fincontrol');
       }
-      // Intentar obtener info fresca de Google en background
+      if (!localStorage.getItem('fc_user_name')) {
+        localStorage.setItem('fc_user_name', 'Usuario');
+      }
+      // Intentar obtener nombre real de Google en background
       getUserInfo().catch(() => {});
+      mostrarChipUsuario();
       document.getElementById('login-screen').classList.add('hidden');
       setSyncState('syncing', 'Sincronizando…');
       await initSheet();
