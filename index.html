@@ -2029,14 +2029,12 @@ function renderCredito() {
     const tipoLabel = c.tipo === 'contado' ? 'Contado' : c.tipo === 'msi' ? `MSI ${c.meses}m` : `MCI ${c.meses}m`;
     const restante      = calcRestanteCargo(c);
     const cuota         = (c.tipo === 'contado') ? c.total : Math.round((c.total / c.meses)*100)/100;
-    const mesesPorFecha = calcMesesTranscurridos(c);
     const mesesPorPago  = (c.tipo !== 'contado' && cuota > 0)
-      ? Math.floor((c.pagado || 0) / cuota)
-      : mesesPorFecha;
-    const mesesPagados  = Math.max(mesesPorFecha, mesesPorPago);
+      ? Math.round((c.pagado || 0) / cuota)
+      : 0;
+    const mesesPagados  = Math.min(mesesPorPago, c.meses);
     const mesesRest     = Math.max(0, c.meses - mesesPagados);
-    // Mostrar el pagado real (c.pagado) si es mayor al calculado por fecha
-    const pagadoMostrar = Math.max(cuota * mesesPagados, c.pagado || 0);
+    const pagadoMostrar = c.pagado || 0;
     return `<tr>
       <td>${c.fecha}</td>
       <td>${c.desc}</td>
