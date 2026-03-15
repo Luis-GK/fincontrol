@@ -593,9 +593,8 @@
       <span id="sync-text">Sin conexión</span>
     </div>
     <div id="user-chip" style="display:none;align-items:center;gap:6px">
-      <span id="user-name-text" style="font-size:12px;font-weight:600;color:var(--text2);max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
       <button onclick="cerrarSesion()" title="Cerrar sesión"
-        style="background:transparent;border:1px solid var(--border);border-radius:8px;padding:5px 10px;cursor:pointer;font-size:12px;font-weight:700;color:var(--text2);font-family:'Syne',sans-serif;transition:all 0.2s"
+        style="background:transparent;border:1px solid var(--border);border-radius:8px;padding:5px 14px;cursor:pointer;font-size:12px;font-weight:700;color:var(--text2);font-family:'Syne',sans-serif;transition:all 0.2s"
         onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'"
         onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text2)'">
         Salir
@@ -3172,14 +3171,14 @@ function iniciarSesionGoogle(prompt = 'select_account') {
       // Mostrar nombre guardado inmediatamente si existe
       const nombreGuardado = localStorage.getItem('fc_user_name');
       if (nombreGuardado) {
-        document.getElementById('user-name-text').textContent = nombreGuardado;
+        
         document.getElementById('user-chip').style.display = 'flex';
       } else {
         // Primer login — guardar email como fallback y mostrar chip
         const email = localStorage.getItem('fc_user_email') || '';
         const fallback = email.split('@')[0] || 'Usuario';
         localStorage.setItem('fc_user_name', fallback);
-        document.getElementById('user-name-text').textContent = fallback;
+        
         document.getElementById('user-chip').style.display = 'flex';
       }
       // Intentar obtener info fresca de Google en background
@@ -3200,7 +3199,7 @@ function iniciarSesionGoogle(prompt = 'select_account') {
 function mostrarChipUsuario() {
   const nombre = localStorage.getItem('fc_user_name');
   if (!nombre) return;
-  document.getElementById('user-name-text').textContent = nombre;
+  
   document.getElementById('user-chip').style.display = 'flex';
 }
 
@@ -3273,7 +3272,7 @@ async function getUserInfo(intentos = 3) {
     const nombre    = currentUser.given_name || currentUser.name || '?';
     const iniciales = nombre.split(' ').map(p => p[0]).join('').toUpperCase().slice(0,2);
     localStorage.setItem('fc_user_initials', iniciales);
-    document.getElementById('user-name-text').textContent = nombre;
+    
     document.getElementById('user-chip').style.display    = 'flex';
   } catch(e) {
     // Red caída u otro error — no bloquear el flujo
