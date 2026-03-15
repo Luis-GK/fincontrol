@@ -1015,7 +1015,7 @@
         <div class="table-wrap">
           <table>
             <thead><tr>
-              <th>Fecha</th><th>Descripción</th><th>Tarjeta</th><th>Tipo</th><th>Cuota/mes</th><th>Pagado</th><th>Meses rest.</th><th>Restante</th><th></th>
+              <th>Fecha</th><th>Descripción</th><th>Tarjeta</th><th>Tipo</th><th>Cuota/mes</th><th>Pagado</th><th>Cargo del mes</th><th>Restante</th><th></th>
             </tr></thead>
             <tbody id="credito-historial">
               <tr><td colspan="8">
@@ -2029,11 +2029,8 @@ function renderCredito() {
     const tipoLabel = c.tipo === 'contado' ? 'Contado' : c.tipo === 'msi' ? `MSI ${c.meses}m` : `MCI ${c.meses}m`;
     const restante      = calcRestanteCargo(c);
     const cuota         = (c.tipo === 'contado') ? c.total : Math.round((c.total / c.meses)*100)/100;
-    const mesesPorPago  = (c.tipo !== 'contado' && cuota > 0)
-      ? Math.round((c.pagado || 0) / cuota)
-      : 0;
-    const mesesPagados  = Math.min(mesesPorPago, c.meses);
-    const mesesRest     = Math.max(0, c.meses - mesesPagados);
+    // "Cargo del mes" = cuántos cortes han pasado desde la compra (por fecha)
+    const cargoDelMes   = calcMesesTranscurridos(c);
     const pagadoMostrar = c.pagado || 0;
     return `<tr>
       <td>${c.fecha}</td>
@@ -2042,7 +2039,7 @@ function renderCredito() {
       <td><span class="badge ${tipoBadge}">${tipoLabel}</span></td>
       <td style="font-family:'Space Mono',monospace;font-size:12px">${c.tipo==='contado'?'—':fmt(cuota)}</td>
       <td style="color:var(--green);font-weight:700">${c.tipo==='contado'?fmt(c.pagado||0):fmt(pagadoMostrar)}</td>
-      <td style="font-size:12px;color:var(--text2)">${c.tipo==='contado'?'—':`${mesesPagados}/${c.meses}`}</td>
+      <td style="font-size:12px;color:var(--text2)">${c.tipo==='contado'?'—':`${cargoDelMes}/${c.meses}`}</td>
       <td style="color:var(--red);font-weight:700">${fmt(restante)}</td>
       <td><button class="btn btn-danger btn-sm" onclick="eliminarCargo(${i})">✕</button></td>
     </tr>`;
@@ -2158,17 +2155,21 @@ function calcUsadoCredito() {
 }
 
 // ── Elimina automáticamente cargos MSI/MCI que ya están liquidados
+// Un cargo se considera liquidado cuando:
+// 1. El cargo del mes ya llegó al total de meses (todos los cortes pasaron) Y
+// 2. El restante es 0 (ya se pagó)
 function limpiarCargosLiquidados() {
   const antes = state.cargos.length;
   state.cargos = state.cargos.filter(c => {
-    if (c.tipo === 'contado') return true; // contado nunca se auto-elimina
-    const mesesVencidos = calcMesesTranscurridos(c);
-    const liquidado = mesesVencidos >= c.meses || calcRestanteCargo(c) <= 0;
+    if (c.tipo === 'contado') return true;
+    const cargoDelMes = calcMesesTranscurridos(c);
+    // Solo eliminar si YA pasaron todos los cortes Y está pagado
+    const liquidado = cargoDelMes > c.meses && calcRestanteCargo(c) <= 0;
     return !liquidado;
   });
   if (state.cargos.length < antes) {
-    saveState();
-    return true; // hubo cambios
+    guardadoInmediato();
+    return true;
   }
   return false;
 }
