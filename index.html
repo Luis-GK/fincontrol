@@ -3243,22 +3243,31 @@ function intentarAutoLogin() {
   // Si no hay nada → se queda en pantalla de login
 }
 
-// ── Info del usuario
-async function getUserInfo() {
+// ── Info del usuario (con retry si el token aún no está activo)
+async function getUserInfo(intentos = 3) {
   try {
     const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
+    if (r.status === 401 && intentos > 1) {
+      // Token recién emitido, esperar 500ms y reintentar
+      await new Promise(res => setTimeout(res, 500));
+      return getUserInfo(intentos - 1);
+    }
+    if (!r.ok) return; // silenciar otros errores
     currentUser = await r.json();
-    localStorage.setItem('fc_user_email', currentUser.email);
-    localStorage.setItem('fc_user_name',  currentUser.given_name || currentUser.name);
-    const nombre = currentUser.given_name || currentUser.name || '?';
+    if (!currentUser.email) return;
+    localStorage.setItem('fc_user_email',    currentUser.email);
+    localStorage.setItem('fc_user_name',     currentUser.given_name || currentUser.name);
+    const nombre    = currentUser.given_name || currentUser.name || '?';
     const iniciales = nombre.split(' ').map(p => p[0]).join('').toUpperCase().slice(0,2);
     localStorage.setItem('fc_user_initials', iniciales);
-    
     document.getElementById('user-name-text').textContent = nombre;
-    document.getElementById('user-chip').style.display = 'flex';
-  } catch(e) {}
+    document.getElementById('user-chip').style.display    = 'flex';
+  } catch(e) {
+    // Red caída u otro error — no bloquear el flujo
+    console.warn('[getUserInfo] Error:', e.message);
+  }
 }
 
 // ── Cerrar sesión
