@@ -1332,7 +1332,7 @@
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Destino</label>
+            <label class="form-label" id="transf-meta-label">Destino</label>
             <select class="form-select" id="transf-meta">
               <option value="__libre__">💰 Ahorro libre</option>
             </select>
@@ -2556,10 +2556,14 @@ function setDireccion(dir) {
     btnDep.className = 'btn btn-primary'; btnDep.style.cssText = 'flex:1;border-radius:0;border:none;justify-content:center';
     btnRet.className = 'btn btn-outline'; btnRet.style.cssText = 'flex:1;border-radius:0;border:none;border-left:1px solid var(--border);justify-content:center';
     btnTr.textContent = '↓ Transferir a ahorro';
+    const lbl = document.getElementById('transf-meta-label');
+    if (lbl) lbl.textContent = 'Destino';
   } else {
     btnRet.className = 'btn btn-primary'; btnRet.style.cssText = 'flex:1;border-radius:0;border:none;border-left:1px solid var(--border);justify-content:center';
     btnDep.className = 'btn btn-outline'; btnDep.style.cssText = 'flex:1;border-radius:0;border:none;justify-content:center';
     btnTr.textContent = '↑ Retirar de ahorro';
+    const lbl = document.getElementById('transf-meta-label');
+    if (lbl) lbl.textContent = 'Origen';
   }
 }
 
