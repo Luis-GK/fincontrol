@@ -999,7 +999,10 @@
 
         <!-- Lista de domiciliados -->
         <div id="dom-lista" style="margin-top:20px"></div>
+        </div>
       </div>
+
+      <!-- Registrar pago de tarjeta -->
       <div class="panel panel-collapsible collapsed" id="panel-reg-pago">
         <div class="panel-title" onclick="togglePanel('panel-reg-pago')"><div class="dot"></div>Registrar pago de tarjeta</div>
         <div class="panel-body">
@@ -1351,6 +1354,7 @@
           </div>
         </div>
         <button class="btn btn-primary" id="btn-transferir" onclick="transferirAhorro()" style="width:100%;justify-content:center">↓ Transferir a ahorro</button>
+        </div>
       </div>
 
       <!-- Rendimiento / interés -->
@@ -1379,6 +1383,7 @@
           </div>
         </div>
         <button class="btn btn-primary" onclick="registrarRendimiento()">Registrar rendimiento</button>
+        </div>
       </div>
 
       <!-- Metas -->
@@ -1656,6 +1661,8 @@ function gfCicloActual() {
 // NAVEGACIÓN
 // ══════════════════════════════════════
 function goTo(section) {
+  // Reset temp ajustes state if leaving ajustes without saving
+  if (section !== 'ajustes') _accionesTemp = null;
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-item, .bnav-item').forEach(i => i.classList.remove('active'));
   document.getElementById('sec-' + section).classList.add('active');
@@ -3746,21 +3753,27 @@ function saveState() {
 // AJUSTES — ACCIONES RÁPIDAS
 // ══════════════════════════════════════
 
-// Catálogo completo de acciones disponibles
 const ACCIONES_CATALOGO = [
-  { id: 'mov-debito',    label: '＋ Movimiento débito',   accion: "goTo('debito')" },
-  { id: 'cargo-credito', label: '＋ Cargo a crédito',     accion: "goTo('credito')" },
-  { id: 'pago-tarjeta',  label: '💳 Pagar tarjeta',       accion: "goTo('credito');setTimeout(()=>togglePanel('panel-reg-pago'),200)" },
-  { id: 'gasto-fijo',    label: '＋ Gasto fijo',          accion: "goTo('gastos-fijos')" },
-  { id: 'ahorrar',       label: '◎ Ahorrar',              accion: "goTo('ahorro')" },
-  { id: 'transferir',    label: '↓ Transferir ahorro',    accion: "goTo('ahorro');setTimeout(()=>togglePanel('panel-transferir'),200)" },
-  { id: 'rendimiento',   label: '📈 Rendimiento',         accion: "goTo('ahorro');setTimeout(()=>togglePanel('panel-rendimiento'),200)" },
-  { id: 'nueva-meta',    label: '🎯 Nueva meta',          accion: "goTo('ahorro');setTimeout(()=>togglePanel('panel-nueva-meta'),200)" },
-  { id: 'mov-historial', label: '↕ Ver historial',        accion: "goTo('movimientos')" },
-  { id: 'ajustes',       label: '⚙ Ajustes',             accion: "goTo('ajustes')" },
+  { id: 'mov-debito',      label: '＋ Movimiento débito',     accion: "goTo('debito');setTimeout(()=>togglePanel('panel-reg-movimiento'),200)" },
+  { id: 'config-nomina',   label: '⚙ Config. nómina',        accion: "goTo('debito');setTimeout(()=>togglePanel('panel-config-nomina'),200)" },
+  { id: 'cargo-credito',   label: '＋ Cargo a crédito',       accion: "goTo('credito');setTimeout(()=>togglePanel('panel-reg-cargo'),200)" },
+  { id: 'agregar-tarjeta', label: '💳 Agregar tarjeta',       accion: "goTo('credito');setTimeout(()=>togglePanel('panel-agregar-tarjeta'),200)" },
+  { id: 'pago-tarjeta',    label: '💳 Pagar tarjeta',         accion: "goTo('credito');setTimeout(()=>togglePanel('panel-reg-pago'),200)" },
+  { id: 'domiciliado',     label: '🔄 Pago domiciliado',      accion: "goTo('credito');setTimeout(()=>togglePanel('panel-domiciliados'),200)" },
+  { id: 'gasto-fijo',      label: '＋ Gasto fijo',            accion: "goTo('gastos-fijos');setTimeout(()=>togglePanel('panel-agregar-gf'),200)" },
+  { id: 'ahorrar',         label: '◎ Ahorrar',                accion: "goTo('ahorro')" },
+  { id: 'nueva-meta',      label: '🎯 Nueva meta',            accion: "goTo('ahorro');setTimeout(()=>togglePanel('panel-nueva-meta'),200)" },
+  { id: 'nuevo-libre',     label: '💰 Nuevo ahorro libre',    accion: "goTo('ahorro');setTimeout(()=>togglePanel('panel-nuevo-libre'),200)" },
+  { id: 'transferir',      label: '↓ Transferir ahorro',      accion: "goTo('ahorro');setTimeout(()=>togglePanel('panel-transferir'),200)" },
+  { id: 'rendimiento',     label: '📈 Rendimiento',           accion: "goTo('ahorro');setTimeout(()=>togglePanel('panel-rendimiento'),200)" },
+  { id: 'mov-historial',   label: '↕ Ver historial',          accion: "goTo('movimientos')" },
+  { id: 'ajustes',         label: '⚙ Ajustes',               accion: "goTo('ajustes')" },
 ];
 
 const ACCIONES_DEFAULT = ['mov-debito','cargo-credito','gasto-fijo','ahorrar'];
+
+// Estado temporal del editor (no se aplica hasta guardar)
+let _accionesTemp = null;
 
 function getAccionesActivas() {
   return state.accionesRapidas || ACCIONES_DEFAULT;
@@ -3777,32 +3790,32 @@ function renderAccionesRapidas() {
   }).join('');
 }
 
-// ── Renderizar sección de ajustes
 function renderAjustes() {
-  const activas  = getAccionesActivas();
+  // Iniciar estado temporal desde el guardado actual
+  if (!_accionesTemp) _accionesTemp = [...getAccionesActivas()];
+
   const pool     = document.getElementById('acciones-pool');
   const activaEl = document.getElementById('acciones-activas');
   if (!pool || !activaEl) return;
 
   // Pool: acciones NO activas
   pool.innerHTML = ACCIONES_CATALOGO
-    .filter(a => !activas.includes(a.id))
+    .filter(a => !_accionesTemp.includes(a.id))
     .map(a => `
-      <button class="btn btn-outline btn-sm" onclick="agregarAccion('${a.id}')"
-        style="cursor:pointer">
+      <button class="btn btn-outline btn-sm" onclick="agregarAccion('${a.id}')">
         ${a.label} ＋
       </button>`)
     .join('');
 
-  // Activas: con botón de quitar y reordenar
-  activaEl.innerHTML = activas.map((id, i) => {
+  // Activas con reordenamiento
+  activaEl.innerHTML = _accionesTemp.map((id, i) => {
     const acc = ACCIONES_CATALOGO.find(a => a.id === id);
     if (!acc) return '';
     return `<div style="display:flex;align-items:center;gap:4px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:6px 10px">
       <span style="font-size:13px;font-weight:600">${acc.label}</span>
       <span style="display:flex;gap:2px;margin-left:6px">
         ${i > 0 ? `<button onclick="moverAccion(${i},-1)" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:14px;padding:0 3px">←</button>` : ''}
-        ${i < activas.length-1 ? `<button onclick="moverAccion(${i},1)" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:14px;padding:0 3px">→</button>` : ''}
+        ${i < _accionesTemp.length-1 ? `<button onclick="moverAccion(${i},1)" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:14px;padding:0 3px">→</button>` : ''}
         <button onclick="quitarAccion('${id}')" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:14px;padding:0 3px">✕</button>
       </span>
     </div>`;
@@ -3810,29 +3823,30 @@ function renderAjustes() {
 }
 
 function agregarAccion(id) {
-  if (!state.accionesRapidas) state.accionesRapidas = [...ACCIONES_DEFAULT];
-  if (!state.accionesRapidas.includes(id)) state.accionesRapidas.push(id);
+  if (!_accionesTemp) _accionesTemp = [...getAccionesActivas()];
+  if (!_accionesTemp.includes(id)) _accionesTemp.push(id);
   renderAjustes();
 }
 
 function quitarAccion(id) {
-  if (!state.accionesRapidas) state.accionesRapidas = [...ACCIONES_DEFAULT];
-  state.accionesRapidas = state.accionesRapidas.filter(a => a !== id);
+  if (!_accionesTemp) _accionesTemp = [...getAccionesActivas()];
+  _accionesTemp = _accionesTemp.filter(a => a !== id);
   renderAjustes();
 }
 
 function moverAccion(i, dir) {
-  if (!state.accionesRapidas) state.accionesRapidas = [...ACCIONES_DEFAULT];
-  const arr = state.accionesRapidas;
+  if (!_accionesTemp) _accionesTemp = [...getAccionesActivas()];
   const j = i + dir;
-  if (j < 0 || j >= arr.length) return;
-  [arr[i], arr[j]] = [arr[j], arr[i]];
+  if (j < 0 || j >= _accionesTemp.length) return;
+  [_accionesTemp[i], _accionesTemp[j]] = [_accionesTemp[j], _accionesTemp[i]];
   renderAjustes();
 }
 
 function guardarAccionesRapidas() {
-  saveState();
-  renderAccionesRapidas();
+  state.accionesRapidas = [..._accionesTemp];
+  _accionesTemp = null; // reset temp state
+  guardadoInmediato();
+  renderAccionesRapidas(); // ahora sí actualizar dashboard
   toast('Acciones rápidas guardadas ✓');
 }
 
