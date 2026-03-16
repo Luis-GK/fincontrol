@@ -3619,7 +3619,15 @@ async function loadFromSheet() {
     state.lastNominaPrompt   = cfgMap['lastNominaPrompt']       || null;
     try { state.gfPagos = JSON.parse(cfgMap['gfPagos'] || '{}'); } catch(e) { state.gfPagos = {}; }
     try { state.ahorrosLibres = JSON.parse(cfgMap['ahorrosLibres'] || '[]'); } catch(e) { state.ahorrosLibres = []; }
-    try { state.accionesRapidas = JSON.parse(cfgMap['accionesRapidas'] || 'null'); } catch(e) { state.accionesRapidas = null; }
+    try {
+      const raw = cfgMap['accionesRapidas'];
+      if (raw && raw !== 'null' && raw !== '') {
+        const parsed = JSON.parse(raw);
+        state.accionesRapidas = Array.isArray(parsed) ? parsed : null;
+      } else {
+        state.accionesRapidas = null;
+      }
+    } catch(e) { state.accionesRapidas = null; }
 
     // MovDebito
     state.movDebito = (movData || []).slice(1).filter(r => r[0]).map(r => ({
@@ -3944,8 +3952,10 @@ if (!state.domiciliados) state.domiciliados = [];
 if (!state.metas) state.metas = [];
 if (!state.movAhorro) state.movAhorro = [];
 if (!state.ahorrosLibres) state.ahorrosLibres = [];
+if (state.accionesRapidas === undefined) state.accionesRapidas = null;
 procesarDomiciliados();
 renderDashboard();
+renderAccionesRapidas(); // aplicar acciones desde localStorage al iniciar
 
 // Restaurar chip de usuario con datos guardados mientras carga
 mostrarChipUsuario();
