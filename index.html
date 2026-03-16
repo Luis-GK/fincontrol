@@ -1014,10 +1014,11 @@
           </div>
           <div class="form-group">
             <label class="form-label">Tipo de pago</label>
-            <select class="form-select" id="pago-tipo">
+            <select class="form-select" id="pago-tipo" onchange="updateTipoPago()">
               <option value="minimo">Pago mínimo</option>
               <option value="total">Pago total del periodo</option>
-              <option value="parcial">Pago parcial</option>
+              <option value="parcial">Pago parcial (solo contado)</option>
+              <option value="abono-msi">Abono anticipado a MSI/MCI</option>
             </select>
           </div>
           <div class="form-group">
@@ -1029,9 +1030,19 @@
             <input class="form-input" type="date" id="pago-fecha"/>
           </div>
         </div>
+        <!-- Selector de cargo MSI (solo para abono anticipado) -->
+        <div id="abono-msi-group" style="display:none" class="form-row">
+          <div class="form-group">
+            <label class="form-label">Cargo a abonar</label>
+            <select class="form-select" id="abono-msi-cargo">
+              <option value="">Seleccionar cargo…</option>
+            </select>
+          </div>
+          <div id="abono-msi-info" style="font-size:12px;color:var(--text2);padding:8px 0;align-self:flex-end"></div>
+        </div>
         <div id="pago-resumen" style="display:none; margin-bottom:16px; padding:12px 16px; background:rgba(96,165,250,0.08); border:1px solid rgba(96,165,250,0.2); border-radius:10px; font-size:13px; color:var(--text2);"></div>
         <button class="btn btn-primary" onclick="registrarPagoTarjeta()">Registrar pago</button>
-      </div>
+        </div>
       </div>
 
       <!-- Historial crédito -->
@@ -2289,6 +2300,7 @@ function limpiarCargosLiquidados() {
   return false;
 }
 function updateResumenPago() {
+  updateTipoPago(); // refresh MSI list if abono selected
   const tarjetaId = document.getElementById('pago-tarjeta').value;
   const div = document.getElementById('pago-resumen');
   if (!tarjetaId) { div.style.display = 'none'; return; }
@@ -2307,6 +2319,41 @@ function updateResumenPago() {
     </div>`;
 }
 
+function updateTipoPago() {
+  const tipo = document.getElementById('pago-tipo').value;
+  const group = document.getElementById('abono-msi-group');
+  group.style.display = tipo === 'abono-msi' ? 'flex' : 'none';
+  if (tipo === 'abono-msi') {
+    // Poblar selector con cargos MSI/MCI de la tarjeta seleccionada
+    const tarjetaId = document.getElementById('pago-tarjeta').value;
+    const sel = document.getElementById('abono-msi-cargo');
+    sel.innerHTML = '<option value="">Seleccionar cargo…</option>';
+    state.cargos
+      .filter(c => c.tarjetaId == tarjetaId && c.tipo !== 'contado' && calcRestanteCargo(c) > 0)
+      .forEach(c => {
+        const cuota = Math.round((c.total / c.meses)*100)/100;
+        const cargo = calcMesesTranscurridos(c);
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = `${c.desc} — ${cargo}/${c.meses} (cuota: ${fmt(cuota)})`;
+        sel.appendChild(opt);
+      });
+    // Actualizar info al cambiar cargo
+    sel.onchange = () => {
+      const cargoId = sel.value;
+      const cargo = state.cargos.find(c => c.id === cargoId);
+      const info = document.getElementById('abono-msi-info');
+      if (cargo) {
+        const cuota = Math.round((cargo.total / cargo.meses)*100)/100;
+        document.getElementById('pago-monto').value = cuota;
+        info.textContent = `Cuota: ${fmt(cuota)} · Restante total: ${fmt(calcRestanteCargo(cargo))}`;
+      } else {
+        info.textContent = '';
+      }
+    };
+  }
+}
+
 // ── Registrar pago de tarjeta
 function registrarPagoTarjeta() {
   const tarjetaId = document.getElementById('pago-tarjeta').value;
@@ -2317,53 +2364,64 @@ function registrarPagoTarjeta() {
   if (!monto || monto <= 0) { toast('Ingresa un monto válido'); return; }
 
   const cargosTarjeta = state.cargos.filter(c => c.tarjetaId == tarjetaId);
+  const tc = state.tarjetas.find(t => t.id == tarjetaId);
 
   if (tipoPago === 'total' || tipoPago === 'minimo') {
-    // Pago total del periodo: avanzar exactamente 1 cuota en cada cargo MSI/MCI
-    // y liquidar todos los cargos de contado pendientes
+    // Pago total/mínimo: avanza 1 cuota en cada MSI/MCI + liquida contados
     cargosTarjeta.forEach(c => {
       if (c.tipo === 'contado') {
-        // Liquidar contado completo
         c.pagado = c.total;
       } else {
-        // Avanzar 1 cuota en MSI/MCI
-        const cuota = Math.round((c.total / c.meses) * 100) / 100;
-        c.pagado = Math.min((c.pagado || 0) + cuota, c.total);
+        const cuota = Math.round((c.total / c.meses)*100)/100;
+        c.pagado = Math.min((c.pagado||0) + cuota, c.total);
       }
     });
-  } else {
-    // Pago parcial: distribuir entre cargos (contado primero, luego MSI/MCI)
+
+  } else if (tipoPago === 'parcial') {
+    // Pago parcial: SOLO aplica a contados, ignora MSI/MCI
     let restoPago = monto;
-    const cargosOrdenados = cargosTarjeta
-      .filter(c => calcRestanteCargo(c) > 0)
-      .sort((a,b) => (a.tipo === 'contado' ? -1 : 1));
-    for (const cargo of cargosOrdenados) {
-      if (restoPago <= 0) break;
-      const aplicar = Math.min(restoPago, calcRestanteCargo(cargo));
-      cargo.pagado = (cargo.pagado || 0) + aplicar;
-      restoPago -= aplicar;
-    }
+    cargosTarjeta
+      .filter(c => c.tipo === 'contado' && calcRestanteCargo(c) > 0)
+      .forEach(c => {
+        if (restoPago <= 0) return;
+        const aplicar = Math.min(restoPago, calcRestanteCargo(c));
+        c.pagado = (c.pagado||0) + aplicar;
+        restoPago -= aplicar;
+      });
+
+  } else if (tipoPago === 'abono-msi') {
+    // Abono anticipado a un cargo MSI específico
+    const cargoId = document.getElementById('abono-msi-cargo').value;
+    if (!cargoId) { toast('Selecciona el cargo a abonar'); return; }
+    const cargo = state.cargos.find(c => c.id === cargoId);
+    if (!cargo) { toast('Cargo no encontrado'); return; }
+    // Sumar el abono al pagado — avanza cuotas pero NO descuenta del próximo pago total
+    cargo.pagado = Math.min((cargo.pagado||0) + monto, cargo.total);
+    toast(`Abono de ${fmt(monto)} aplicado a ${cargo.desc} ✓`);
   }
 
-  // Eliminar cargos de contado ya liquidados
+  // Limpiar contados liquidados
   state.cargos = state.cargos.filter(c => {
     if (c.tipo !== 'contado') return true;
     return calcRestanteCargo(c) > 0;
   });
 
   // Registrar en movimientos de débito
+  const tipoLabel = { total: 'total', minimo: 'mínimo', parcial: 'parcial', 'abono-msi': 'abono MSI' }[tipoPago];
   state.movDebito.push({
     tipo: 'gasto', monto,
-    desc: `Pago tarjeta ${state.tarjetas.find(t=>t.id==tarjetaId)?.nombre || ''}`,
+    desc: `Pago tarjeta ${tc?.nombre || ''} (${tipoLabel})`,
     fecha, esNomina: false
   });
-  state.debito.saldo = (state.debito.saldo || 0) - monto;
+  state.debito.saldo = (state.debito.saldo||0) - monto;
 
   guardadoInmediato();
   document.getElementById('pago-monto').value = '';
   document.getElementById('pago-resumen').style.display = 'none';
+  document.getElementById('abono-msi-group').style.display = 'none';
+  document.getElementById('pago-tipo').value = 'minimo';
   renderCredito(); renderDashboard(); renderDebito();
-  toast('Pago registrado ✓');
+  if (tipoPago !== 'abono-msi') toast('Pago registrado ✓');
 }
 
 // ══════════════════════════════════════
