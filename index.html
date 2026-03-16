@@ -419,15 +419,17 @@
     }
     .bottom-nav-inner {
       display: flex; justify-content: space-around; align-items: center;
+      overflow-x: auto; -webkit-overflow-scrolling: touch;
     }
     .bnav-item {
-      display: flex; flex-direction: column; align-items: center; gap: 3px;
-      cursor: pointer; padding: 4px 12px;
-      color: var(--text3); font-size: 10px; font-weight: 600;
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      cursor: pointer; padding: 4px 6px;
+      color: var(--text3); font-size: 9px; font-weight: 600;
       transition: color var(--transition);
-      font-family: 'Space Mono', monospace; letter-spacing: 0.5px;
+      font-family: 'Space Mono', monospace; letter-spacing: 0.3px;
+      flex-shrink: 0; min-width: 44px;
     }
-    .bnav-item .icon { font-size: 20px; }
+    .bnav-item .icon { font-size: 18px; }
     .bnav-item.active { color: var(--text); }
 
     /* ── RESPONSIVE ── */
@@ -3603,6 +3605,7 @@ async function loadFromSheet() {
     }));
 
     localStorage.setItem('fincontrol_state', JSON.stringify(state));
+    renderAccionesRapidas();
   } catch(e) {
     console.error('Error al cargar:', e);
     setSyncState('error', 'Error al cargar');
