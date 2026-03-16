@@ -2008,12 +2008,11 @@ function eliminarMovDebito(i) {
   const m = state.movDebito[i];
   state.debito.saldo = (state.debito.saldo || 0) - (m.tipo === 'deposito' ? m.monto : -m.monto);
 
-  // Detectar si es depósito de nómina — por esNomina O por descripción común
+  // ── Si es movimiento de nómina → resetear nomina
   const esDepNomina = m.tipo === 'deposito' &&
     (m.esNomina === true || m.esNomina === 'true' || m.esNomina === 'TRUE' ||
      (m.desc || '').toLowerCase().includes('nóm') ||
      (m.desc || '').toLowerCase().includes('nom'));
-
   if (esDepNomina) {
     state.lastNominaPrompt = null;
     const anteriores = state.movDebito.filter((mv, idx) => {
@@ -2023,13 +2022,37 @@ function eliminarMovDebito(i) {
       return idx !== i && esN && mv.tipo === 'deposito';
     });
     state.debito.nomina = anteriores.length > 0
-      ? anteriores.sort((a,b) => b.fecha.localeCompare(a.fecha))[0].monto
-      : 0;
+      ? anteriores.sort((a,b) => b.fecha.localeCompare(a.fecha))[0].monto : 0;
+  }
+
+  // ── Si es movimiento de ahorro → revertir en la cuenta de ahorro correspondiente
+  const desc = (m.desc || '').toLowerCase();
+  const esAhorro   = desc.includes('ahorro:') || desc.includes('retiro ahorro:');
+  if (esAhorro) {
+    // Buscar en movAhorro el movimiento correspondiente por fecha y monto
+    if (!state.movAhorro) state.movAhorro = [];
+    const idxAhorro = state.movAhorro.findLastIndex
+      ? state.movAhorro.findLastIndex(ma => ma.monto === m.monto && ma.fecha === m.fecha)
+      : [...state.movAhorro].reverse().findIndex(ma => ma.monto === m.monto && ma.fecha === m.fecha);
+
+    if (idxAhorro !== -1) {
+      const realIdx = state.movAhorro.findLastIndex
+        ? idxAhorro
+        : state.movAhorro.length - 1 - [...state.movAhorro].reverse().findIndex(ma => ma.monto === m.monto && ma.fecha === m.fecha);
+      const movAh = state.movAhorro[realIdx];
+      // Revertir en la cuenta de ahorro
+      const meta = (state.metas||[]).find(mt => mt.id === movAh.metaId);
+      const libre = (state.ahorrosLibres||[]).find(a => a.id === movAh.metaId);
+      if (meta) meta.saldo = Math.max(0, (meta.saldo||0) - (movAh.tipo === 'deposito' ? movAh.monto : -movAh.monto));
+      if (libre) libre.saldo = Math.max(0, (libre.saldo||0) - (movAh.tipo === 'deposito' ? movAh.monto : -movAh.monto));
+      // Eliminar el movimiento de ahorro
+      state.movAhorro.splice(realIdx !== undefined ? realIdx : idxAhorro, 1);
+    }
   }
 
   state.movDebito.splice(i, 1);
   guardadoInmediato();
-  renderDebito(); renderDashboard();
+  renderDebito(); renderDashboard(); renderAhorro();
   toast('Movimiento eliminado');
 }
 
