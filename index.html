@@ -3173,13 +3173,29 @@ function actualizarBannerNomina() {
 
 function checkNominaVariable() {
   actualizarBannerNomina();
-  // Modal solo para nómina variable (necesita ingresar monto)
+  // Modal solo para nómina variable
   if (state.debito.tipoNomina !== 'variable') return;
   if (!esDiaDeDeposito()) return;
+
   const hoy = today();
+  // No mostrar si ya se pospuso hoy
   if (state.lastNominaPrompt === hoy) return;
-  const yaDeposito = state.movDebito.some(m => m.fecha === hoy && m.tipo === 'deposito' && m.esNomina);
+
+  // No mostrar si ya hay depósito de nómina registrado en este ciclo
+  const { frecuencia, dia } = state.debito;
+  let fechaDepStr = hoy; // fallback
+  if (frecuencia === 'mensual' && dia) {
+    const fechaHoy = new Date(); fechaHoy.setHours(0,0,0,0);
+    const fechaDep = ajustarFinDeSemana(new Date(fechaHoy.getFullYear(), fechaHoy.getMonth(), dia));
+    fechaDepStr = fechaDep.toISOString().split('T')[0];
+  }
+  const yaDeposito = state.movDebito.some(m =>
+    m.tipo === 'deposito' &&
+    (m.esNomina === true || m.esNomina === 'true' || m.esNomina === 'TRUE') &&
+    m.fecha >= fechaDepStr
+  );
   if (yaDeposito) return;
+
   setTimeout(() => {
     document.getElementById('modal-nomina').classList.add('open');
   }, 800);
