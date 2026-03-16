@@ -615,6 +615,7 @@
         Salir
       </button>
     </div>
+    <button class="theme-toggle" onclick="goTo('ajustes')" title="Ajustes" id="btn-ajustes-topbar">⚙</button>
     <button class="theme-toggle" onclick="toggleTheme()" title="Cambiar tema">☀</button>
   </div>
 </header>
@@ -662,10 +663,6 @@
     </div>
     <div class="nav-item" onclick="goTo('movimientos')">
       <span class="icon">↕</span> Movimientos
-    </div>
-    <div class="nav-section-label">Config</div>
-    <div class="nav-item" onclick="goTo('ajustes')">
-      <span class="icon">⚙</span> Ajustes
     </div>
   </nav>
 
@@ -1446,9 +1443,6 @@
     <div class="bnav-item" onclick="goTo('movimientos')">
       <span class="icon">↕</span>Historial
     </div>
-    <div class="bnav-item" onclick="goTo('ajustes')">
-      <span class="icon">⚙</span>Ajustes
-    </div>
   </div>
 </nav>
 
@@ -1669,6 +1663,9 @@ function goTo(section) {
   document.querySelectorAll('.nav-item, .bnav-item').forEach(i => i.classList.remove('active'));
   document.getElementById('sec-' + section).classList.add('active');
   document.querySelectorAll(`[onclick="goTo('${section}')"]`).forEach(el => el.classList.add('active'));
+  // Highlight gear icon when on ajustes
+  const gear = document.getElementById('btn-ajustes-topbar');
+  if (gear) gear.style.color = section === 'ajustes' ? 'var(--yellow)' : '';
   renderSection(section);
 }
 
