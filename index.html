@@ -545,6 +545,19 @@
 
     #banner-nomina { display: none; animation: fadeIn 0.4s ease; }
     #banner-nomina.visible { display: block; }
+    /* ── COLLAPSIBLE PANELS ── */
+    .panel-collapsible .panel-title {
+      cursor: pointer; user-select: none;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .panel-collapsible .panel-title::after {
+      content: '▾'; font-size: 16px; color: var(--text3);
+      transition: transform var(--transition); margin-left: 8px; flex-shrink:0;
+    }
+    .panel-collapsible.collapsed .panel-title::after { transform: rotate(-90deg); }
+    .panel-collapsible .panel-body { overflow: hidden; transition: max-height 0.35s ease, opacity 0.3s ease; max-height: 2000px; opacity: 1; }
+    .panel-collapsible.collapsed .panel-body { max-height: 0 !important; opacity: 0; pointer-events: none; }
+
     .toast {
       position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px);
       background: var(--text); color: var(--bg);
@@ -648,6 +661,10 @@
     <div class="nav-item" onclick="goTo('movimientos')">
       <span class="icon">↕</span> Movimientos
     </div>
+    <div class="nav-section-label">Config</div>
+    <div class="nav-item" onclick="goTo('ajustes')">
+      <span class="icon">⚙</span> Ajustes
+    </div>
   </nav>
 
   <!-- MAIN -->
@@ -722,12 +739,7 @@
       <!-- Quick actions -->
       <div class="panel">
         <div class="panel-title"><div class="dot"></div>Acciones rápidas</div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <button class="btn btn-outline" onclick="goTo('debito')">＋ Movimiento débito</button>
-          <button class="btn btn-outline" onclick="goTo('credito')">＋ Cargo a crédito</button>
-          <button class="btn btn-outline" onclick="goTo('gastos-fijos')">＋ Gasto fijo</button>
-          <button class="btn btn-outline" onclick="goTo('ahorro')">◎ Ahorrar</button>
-        </div>
+        <div id="dash-acciones-rapidas" style="display:flex;gap:10px;flex-wrap:wrap;"></div>
       </div>
 
       <!-- Last movements -->
@@ -761,8 +773,9 @@
       </div>
 
       <!-- Config nómina -->
-      <div class="panel">
-        <div class="panel-title"><div class="dot"></div>Configuración de nómina</div>
+      <div class="panel panel-collapsible collapsed" id="panel-config-nomina">
+        <div class="panel-title" onclick="togglePanel('panel-config-nomina')"><div class="dot"></div>Configuración de nómina</div>
+        <div class="panel-body">
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Saldo actual</label>
@@ -800,6 +813,7 @@
         </div>
         <button class="btn btn-primary" onclick="guardarDebito()">Guardar configuración</button>
       </div>
+      </div>
 
       <!-- Resumen débito -->
       <div class="cards-grid">
@@ -815,8 +829,9 @@
       </div>
 
       <!-- Registrar movimiento -->
-      <div class="panel">
-        <div class="panel-title"><div class="dot"></div>Registrar movimiento</div>
+      <div class="panel panel-collapsible collapsed" id="panel-reg-movimiento">
+        <div class="panel-title" onclick="togglePanel('panel-reg-movimiento')"><div class="dot"></div>Registrar movimiento</div>
+        <div class="panel-body">
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Tipo</label>
@@ -839,6 +854,7 @@
           </div>
         </div>
         <button class="btn btn-primary" onclick="agregarMovDebito()">Registrar</button>
+      </div>
       </div>
 
       <!-- Historial -->
@@ -872,8 +888,9 @@
       </div>
 
       <!-- Agregar tarjeta -->
-      <div class="panel">
-        <div class="panel-title"><div class="dot"></div>Agregar tarjeta</div>
+      <div class="panel panel-collapsible collapsed" id="panel-agregar-tarjeta">
+        <div class="panel-title" onclick="togglePanel('panel-agregar-tarjeta')"><div class="dot"></div>Agregar tarjeta</div>
+        <div class="panel-body">
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Nombre de tarjeta</label>
@@ -894,6 +911,7 @@
         </div>
         <button class="btn btn-primary" onclick="agregarTarjeta()">Agregar tarjeta</button>
       </div>
+      </div>
 
       <!-- Tarjetas listadas -->
       <div id="tarjetas-container">
@@ -904,8 +922,9 @@
       </div>
 
       <!-- Registrar compra -->
-      <div class="panel">
-        <div class="panel-title"><div class="dot"></div>Registrar compra / cargo</div>
+      <div class="panel panel-collapsible collapsed" id="panel-reg-cargo">
+        <div class="panel-title" onclick="togglePanel('panel-reg-cargo')"><div class="dot"></div>Registrar compra / cargo</div>
+        <div class="panel-body">
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Tarjeta</label>
@@ -953,10 +972,12 @@
         </div>
         <button class="btn btn-primary" onclick="agregarCargo()">Registrar cargo</button>
       </div>
+      </div>
 
       <!-- Pagos domiciliados -->
-      <div class="panel">
-        <div class="panel-title"><div class="dot"></div>Pagos domiciliados</div>
+      <div class="panel panel-collapsible collapsed" id="panel-domiciliados">
+        <div class="panel-title" onclick="togglePanel('panel-domiciliados')"><div class="dot"></div>Pagos domiciliados</div>
+        <div class="panel-body">
         <p style="font-size:13px;color:var(--text2);margin-bottom:16px;">Se cobran automáticamente en el día de corte de la tarjeta cada mes.</p>
         <div class="form-row">
           <div class="form-group">
@@ -979,8 +1000,9 @@
         <!-- Lista de domiciliados -->
         <div id="dom-lista" style="margin-top:20px"></div>
       </div>
-      <div class="panel">
-        <div class="panel-title"><div class="dot"></div>Registrar pago de tarjeta</div>
+      <div class="panel panel-collapsible collapsed" id="panel-reg-pago">
+        <div class="panel-title" onclick="togglePanel('panel-reg-pago')"><div class="dot"></div>Registrar pago de tarjeta</div>
+        <div class="panel-body">
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Tarjeta</label>
@@ -1007,6 +1029,7 @@
         </div>
         <div id="pago-resumen" style="display:none; margin-bottom:16px; padding:12px 16px; background:rgba(96,165,250,0.08); border:1px solid rgba(96,165,250,0.2); border-radius:10px; font-size:13px; color:var(--text2);"></div>
         <button class="btn btn-primary" onclick="registrarPagoTarjeta()">Registrar pago</button>
+      </div>
       </div>
 
       <!-- Historial crédito -->
@@ -1040,8 +1063,9 @@
       </div>
 
       <!-- Agregar gasto fijo -->
-      <div class="panel">
-        <div class="panel-title"><div class="dot"></div>Agregar gasto fijo</div>
+      <div class="panel panel-collapsible collapsed" id="panel-agregar-gf">
+        <div class="panel-title" onclick="togglePanel('panel-agregar-gf')"><div class="dot"></div>Agregar gasto fijo</div>
+        <div class="panel-body">
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Nombre</label>
@@ -1091,6 +1115,7 @@
           </div>
         </div>
         <button class="btn btn-primary" onclick="agregarGastoFijo()">Agregar gasto fijo</button>
+      </div>
       </div>
 
       <!-- Resumen gastos vs sueldo -->
@@ -1217,8 +1242,9 @@
       </div>
 
       <!-- Nueva meta -->
-      <div class="panel">
-        <div class="panel-title"><div class="dot"></div>Nueva meta de ahorro</div>
+      <div class="panel panel-collapsible collapsed" id="panel-nueva-meta">
+        <div class="panel-title" onclick="togglePanel('panel-nueva-meta')"><div class="dot"></div>Nueva meta de ahorro</div>
+        <div class="panel-body">
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Nombre de la meta</label>
@@ -1261,10 +1287,12 @@
         </div>
         <button class="btn btn-primary" onclick="agregarMeta()">Crear meta</button>
       </div>
+      </div>
 
       <!-- Nuevo ahorro libre -->
-      <div class="panel">
-        <div class="panel-title"><div class="dot"></div>Nuevo ahorro libre</div>
+      <div class="panel panel-collapsible collapsed" id="panel-nuevo-libre">
+        <div class="panel-title" onclick="togglePanel('panel-nuevo-libre')"><div class="dot"></div>Nuevo ahorro libre</div>
+        <div class="panel-body">
         <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Sin objetivo ni fecha límite. Solo dale un nombre y empieza a guardar.</p>
         <div class="form-row">
           <div class="form-group">
@@ -1291,8 +1319,10 @@
         </div>
         <button class="btn btn-primary" onclick="agregarAhorroLibre()">Crear ahorro libre</button>
       </div>
-      <div class="panel">
-        <div class="panel-title"><div class="dot"></div>Transferir</div>
+      </div>
+      <div class="panel panel-collapsible collapsed" id="panel-transferir">
+        <div class="panel-title" onclick="togglePanel('panel-transferir')"><div class="dot"></div>Transferir</div>
+        <div class="panel-body">
         <!-- Toggle dirección -->
         <div style="display:flex;gap:0;margin-bottom:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
           <button id="btn-deposito" class="btn btn-primary" style="flex:1;border-radius:0;border:none;justify-content:center" onclick="setDireccion('deposito')">↓ Débito → Ahorro</button>
@@ -1324,8 +1354,9 @@
       </div>
 
       <!-- Rendimiento / interés -->
-      <div class="panel">
-        <div class="panel-title"><div class="dot"></div>Registrar rendimiento</div>
+      <div class="panel panel-collapsible collapsed" id="panel-rendimiento">
+        <div class="panel-title" onclick="togglePanel('panel-rendimiento')"><div class="dot"></div>Registrar rendimiento</div>
+        <div class="panel-body">
         <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Registra manualmente los intereses de CETES, fondos u otras inversiones.</p>
         <div class="form-row">
           <div class="form-group">
@@ -1355,8 +1386,37 @@
 
     </section>
 
+    <!-- ═══════════════════════════════════════
+         AJUSTES
+    ═══════════════════════════════════════ -->
+    <section id="sec-ajustes" class="section">
+      <div class="section-header">
+        <div class="section-title">Ajustes</div>
+        <div class="section-subtitle">Personaliza tu experiencia en FinControl</div>
+      </div>
+
+      <!-- Acciones rápidas editor -->
+      <div class="panel">
+        <div class="panel-title"><div class="dot"></div>Acciones rápidas del Dashboard</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Selecciona y ordena las acciones que aparecen en el Dashboard. Arrastra para reordenar.</p>
+
+        <div id="acciones-disponibles" style="margin-bottom:16px">
+          <div style="font-size:11px;font-family:'Space Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Disponibles</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px" id="acciones-pool"></div>
+        </div>
+
+        <div id="acciones-activas-wrap">
+          <div style="font-size:11px;font-family:'Space Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Activas (arrastra para reordenar)</div>
+          <div id="acciones-activas" style="display:flex;flex-wrap:wrap;gap:8px;min-height:44px;padding:8px;background:var(--bg3);border-radius:8px;border:1px dashed var(--border)"></div>
+        </div>
+
+        <button class="btn btn-primary" style="margin-top:16px" onclick="guardarAccionesRapidas()">Guardar cambios</button>
+      </div>
+    </section>
+
   </main>
 </div>
+      </div>
 
 <!-- BOTTOM NAV (móvil) -->
 <nav class="bottom-nav">
@@ -1378,6 +1438,9 @@
     </div>
     <div class="bnav-item" onclick="goTo('movimientos')">
       <span class="icon">↕</span>Historial
+    </div>
+    <div class="bnav-item" onclick="goTo('ajustes')">
+      <span class="icon">⚙</span>Ajustes
     </div>
   </div>
 </nav>
@@ -1511,6 +1574,7 @@ let state = {
   metas: [],          // metas de ahorro con objetivo
   movAhorro: [],      // historial de movimientos de ahorro
   ahorrosLibres: [],  // múltiples cuentas de ahorro libre (sin meta)
+  accionesRapidas: null, // null = usar defaults
   gastosFijos: [],
   movDebito: [],
   lastNominaPrompt: null,
@@ -1605,6 +1669,7 @@ function renderSection(s) {
   if (s === 'credito') renderCredito();
   if (s === 'gastos-fijos') renderGastosFijos();
   if (s === 'ahorro') renderAhorro();
+  if (s === 'ajustes') renderAjustes();
   if (s === 'movimientos') renderMovimientos();
 }
 
@@ -1616,6 +1681,12 @@ function toggleTheme() {
   darkMode = !darkMode;
   document.body.classList.toggle('light', !darkMode);
   document.querySelector('.theme-toggle').textContent = darkMode ? '☀' : '☾';
+}
+
+// ── Toggle panel colapsable
+function togglePanel(id) {
+  const panel = document.getElementById(id);
+  if (panel) panel.classList.toggle('collapsed');
 }
 
 // ══════════════════════════════════════
@@ -1691,6 +1762,9 @@ function renderDashboard() {
   if (subGastos) subGastos.textContent = pagadoGF > 0 ? `Pagado: ${fmt(pagadoGF)} · Pendiente` : 'Pendiente por pagar este mes';
   const subLibre = document.querySelector('#dash-libre + .card-sub');
   if (subLibre) subLibre.textContent = 'Saldo − gastos pendientes';
+
+  // Acciones rápidas dinámicas
+  renderAccionesRapidas();
 
   // Últimos 5 movimientos
   actualizarBannerNomina();
@@ -3454,6 +3528,7 @@ async function loadFromSheet() {
     state.lastNominaPrompt   = cfgMap['lastNominaPrompt']       || null;
     try { state.gfPagos = JSON.parse(cfgMap['gfPagos'] || '{}'); } catch(e) { state.gfPagos = {}; }
     try { state.ahorrosLibres = JSON.parse(cfgMap['ahorrosLibres'] || '[]'); } catch(e) { state.ahorrosLibres = []; }
+    try { state.accionesRapidas = JSON.parse(cfgMap['accionesRapidas'] || 'null'); } catch(e) { state.accionesRapidas = null; }
 
     // MovDebito
     state.movDebito = (movData || []).slice(1).filter(r => r[0]).map(r => ({
@@ -3548,7 +3623,8 @@ async function saveToSheet() {
       ['tipoNomina',       state.debito.tipoNomina],
       ['lastNominaPrompt', state.lastNominaPrompt || ''],
       ['gfPagos',          JSON.stringify(state.gfPagos || {})],
-      ['ahorrosLibres',    JSON.stringify(state.ahorrosLibres || [])]
+      ['ahorrosLibres',    JSON.stringify(state.ahorrosLibres || [])],
+      ['accionesRapidas',  JSON.stringify(state.accionesRapidas || null)]
     ];
     const movRows = [['tipo','monto','desc','fecha','esNomina'],
       ...state.movDebito.map(m => [m.tipo, m.monto, m.desc, m.fecha, m.esNomina||false])];
@@ -3664,6 +3740,100 @@ function saveState() {
     await saveToSheet();
     _isSaving = false;
   }, 800); // reducido de 3s a 0.8s
+}
+
+// ══════════════════════════════════════
+// AJUSTES — ACCIONES RÁPIDAS
+// ══════════════════════════════════════
+
+// Catálogo completo de acciones disponibles
+const ACCIONES_CATALOGO = [
+  { id: 'mov-debito',    label: '＋ Movimiento débito',   accion: "goTo('debito')" },
+  { id: 'cargo-credito', label: '＋ Cargo a crédito',     accion: "goTo('credito')" },
+  { id: 'pago-tarjeta',  label: '💳 Pagar tarjeta',       accion: "goTo('credito');setTimeout(()=>togglePanel('panel-reg-pago'),200)" },
+  { id: 'gasto-fijo',    label: '＋ Gasto fijo',          accion: "goTo('gastos-fijos')" },
+  { id: 'ahorrar',       label: '◎ Ahorrar',              accion: "goTo('ahorro')" },
+  { id: 'transferir',    label: '↓ Transferir ahorro',    accion: "goTo('ahorro');setTimeout(()=>togglePanel('panel-transferir'),200)" },
+  { id: 'rendimiento',   label: '📈 Rendimiento',         accion: "goTo('ahorro');setTimeout(()=>togglePanel('panel-rendimiento'),200)" },
+  { id: 'nueva-meta',    label: '🎯 Nueva meta',          accion: "goTo('ahorro');setTimeout(()=>togglePanel('panel-nueva-meta'),200)" },
+  { id: 'mov-historial', label: '↕ Ver historial',        accion: "goTo('movimientos')" },
+  { id: 'ajustes',       label: '⚙ Ajustes',             accion: "goTo('ajustes')" },
+];
+
+const ACCIONES_DEFAULT = ['mov-debito','cargo-credito','gasto-fijo','ahorrar'];
+
+function getAccionesActivas() {
+  return state.accionesRapidas || ACCIONES_DEFAULT;
+}
+
+function renderAccionesRapidas() {
+  const cont = document.getElementById('dash-acciones-rapidas');
+  if (!cont) return;
+  const activas = getAccionesActivas();
+  cont.innerHTML = activas.map(id => {
+    const acc = ACCIONES_CATALOGO.find(a => a.id === id);
+    if (!acc) return '';
+    return `<button class="btn btn-outline" onclick="${acc.accion}">${acc.label}</button>`;
+  }).join('');
+}
+
+// ── Renderizar sección de ajustes
+function renderAjustes() {
+  const activas  = getAccionesActivas();
+  const pool     = document.getElementById('acciones-pool');
+  const activaEl = document.getElementById('acciones-activas');
+  if (!pool || !activaEl) return;
+
+  // Pool: acciones NO activas
+  pool.innerHTML = ACCIONES_CATALOGO
+    .filter(a => !activas.includes(a.id))
+    .map(a => `
+      <button class="btn btn-outline btn-sm" onclick="agregarAccion('${a.id}')"
+        style="cursor:pointer">
+        ${a.label} ＋
+      </button>`)
+    .join('');
+
+  // Activas: con botón de quitar y reordenar
+  activaEl.innerHTML = activas.map((id, i) => {
+    const acc = ACCIONES_CATALOGO.find(a => a.id === id);
+    if (!acc) return '';
+    return `<div style="display:flex;align-items:center;gap:4px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:6px 10px">
+      <span style="font-size:13px;font-weight:600">${acc.label}</span>
+      <span style="display:flex;gap:2px;margin-left:6px">
+        ${i > 0 ? `<button onclick="moverAccion(${i},-1)" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:14px;padding:0 3px">←</button>` : ''}
+        ${i < activas.length-1 ? `<button onclick="moverAccion(${i},1)" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:14px;padding:0 3px">→</button>` : ''}
+        <button onclick="quitarAccion('${id}')" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:14px;padding:0 3px">✕</button>
+      </span>
+    </div>`;
+  }).join('');
+}
+
+function agregarAccion(id) {
+  if (!state.accionesRapidas) state.accionesRapidas = [...ACCIONES_DEFAULT];
+  if (!state.accionesRapidas.includes(id)) state.accionesRapidas.push(id);
+  renderAjustes();
+}
+
+function quitarAccion(id) {
+  if (!state.accionesRapidas) state.accionesRapidas = [...ACCIONES_DEFAULT];
+  state.accionesRapidas = state.accionesRapidas.filter(a => a !== id);
+  renderAjustes();
+}
+
+function moverAccion(i, dir) {
+  if (!state.accionesRapidas) state.accionesRapidas = [...ACCIONES_DEFAULT];
+  const arr = state.accionesRapidas;
+  const j = i + dir;
+  if (j < 0 || j >= arr.length) return;
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+  renderAjustes();
+}
+
+function guardarAccionesRapidas() {
+  saveState();
+  renderAccionesRapidas();
+  toast('Acciones rápidas guardadas ✓');
 }
 
 // ══════════════════════════════════════
