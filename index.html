@@ -1571,6 +1571,32 @@
   </div>
 </div>
 
+<!-- MODAL EDITAR MOVIMIENTO AHORRO -->
+<div class="modal-overlay" id="modal-editar-mov-ahorro">
+  <div class="modal">
+    <div class="modal-title">✏️ Editar movimiento</div>
+    <input type="hidden" id="edit-mov-ahorro-id"/>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Monto</label>
+        <input class="form-input" type="number" id="edit-mov-ahorro-monto"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Fecha</label>
+        <input class="form-input" type="date" id="edit-mov-ahorro-fecha"/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Nota</label>
+      <input class="form-input" type="text" id="edit-mov-ahorro-nota"/>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="document.getElementById('modal-editar-mov-ahorro').classList.remove('open')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarEditMovAhorro()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
@@ -2593,7 +2619,71 @@ function agregarAhorroLibre() {
   toast('Ahorro libre creado ✓');
 }
 
-function eliminarAhorroLibre(id) {
+// ── Eliminar movimiento de ahorro
+function eliminarMovAhorro(id) {
+  if (!confirm('¿Eliminar este movimiento?')) return;
+  const mv = state.movAhorro.find(m => m.id === id);
+  if (!mv) return;
+
+  // Revertir el saldo en la cuenta correspondiente
+  const meta  = (state.metas||[]).find(m => m.id === mv.metaId);
+  const libre = (state.ahorrosLibres||[]).find(a => a.id === mv.metaId);
+  const cuenta = meta || libre;
+  if (cuenta) {
+    if (mv.tipo === 'deposito' || mv.tipo === 'rendimiento') {
+      cuenta.saldo = Math.max(0, (cuenta.saldo||0) - mv.monto);
+    } else if (mv.tipo === 'retiro') {
+      cuenta.saldo = (cuenta.saldo||0) + mv.monto;
+    }
+  }
+
+  state.movAhorro = state.movAhorro.filter(m => m.id !== id);
+  guardadoInmediato();
+  renderAhorro(); renderDashboard();
+  toast('Movimiento eliminado ✓');
+}
+
+// ── Abrir modal de edición
+function abrirEditarMovAhorro(id) {
+  const mv = state.movAhorro.find(m => m.id === id);
+  if (!mv) return;
+  document.getElementById('edit-mov-ahorro-id').value    = id;
+  document.getElementById('edit-mov-ahorro-monto').value = mv.monto;
+  document.getElementById('edit-mov-ahorro-fecha').value = mv.fecha;
+  document.getElementById('edit-mov-ahorro-nota').value  = mv.nota || '';
+  document.getElementById('modal-editar-mov-ahorro').classList.add('open');
+}
+
+// ── Guardar edición de movimiento
+function guardarEditMovAhorro() {
+  const id      = document.getElementById('edit-mov-ahorro-id').value;
+  const mv      = state.movAhorro.find(m => m.id === id);
+  if (!mv) return;
+
+  const nuevoMonto = parseFloat(document.getElementById('edit-mov-ahorro-monto').value) || mv.monto;
+  const diff       = nuevoMonto - mv.monto; // diferencia para ajustar saldo
+
+  // Ajustar saldo en la cuenta
+  const meta  = (state.metas||[]).find(m => m.id === mv.metaId);
+  const libre = (state.ahorrosLibres||[]).find(a => a.id === mv.metaId);
+  const cuenta = meta || libre;
+  if (cuenta) {
+    if (mv.tipo === 'deposito' || mv.tipo === 'rendimiento') {
+      cuenta.saldo = Math.max(0, (cuenta.saldo||0) + diff);
+    } else if (mv.tipo === 'retiro') {
+      cuenta.saldo = Math.max(0, (cuenta.saldo||0) - diff);
+    }
+  }
+
+  mv.monto = nuevoMonto;
+  mv.fecha = document.getElementById('edit-mov-ahorro-fecha').value || mv.fecha;
+  mv.nota  = document.getElementById('edit-mov-ahorro-nota').value || mv.nota;
+
+  document.getElementById('modal-editar-mov-ahorro').classList.remove('open');
+  guardadoInmediato();
+  renderAhorro(); renderDashboard();
+  toast('Movimiento actualizado ✓');
+}
   if (!confirm('¿Eliminar este ahorro libre?')) return;
   state.ahorrosLibres = (state.ahorrosLibres||[]).filter(a => a.id !== id);
   state.movAhorro = (state.movAhorro||[]).filter(m => m.metaId !== id);
@@ -2799,11 +2889,13 @@ function renderAhorro() {
       <div style="font-size:11px;font-family:'Space Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Últimos movimientos</div>
       <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px">
         ${movs.map(mv => `
-          <div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border)">
             <span style="color:var(--text2)">${mv.tipo==='rendimiento'?'📈':mv.tipo==='deposito'?'↓':'↑'} ${mv.nota}</span>
-            <span style="display:flex;gap:10px;align-items:center">
+            <span style="display:flex;gap:8px;align-items:center">
               <span style="font-size:11px;color:var(--text3)">${mv.fecha}</span>
               <span style="font-weight:700;color:${mv.tipo==='retiro'?'var(--red)':'var(--green)'}">${mv.tipo==='retiro'?'-':'+'}${fmt(mv.monto)}</span>
+              <button class="btn btn-outline btn-sm" onclick="abrirEditarMovAhorro('${mv.id}')" style="padding:2px 7px;font-size:11px">✏️</button>
+              <button class="btn btn-danger btn-sm" onclick="eliminarMovAhorro('${mv.id}')" style="padding:2px 7px;font-size:11px">✕</button>
             </span>
           </div>`).join('')}
       </div>` : `<div style="font-size:13px;color:var(--text3);margin-bottom:12px">Sin movimientos aún</div>`}
@@ -2855,11 +2947,13 @@ function renderAhorro() {
               <span style="margin-right:6px">${mv.tipo === 'deposito' ? '↓' : mv.tipo === 'retiro' ? '↑' : '📈'}</span>
               <span style="color:var(--text2)">${mv.nota}</span>
             </div>
-            <div style="display:flex;gap:12px;align-items:center">
+            <div style="display:flex;gap:8px;align-items:center">
               <span style="font-size:11px;color:var(--text3)">${mv.fecha}</span>
               <span style="font-weight:700;color:${mv.tipo === 'retiro' ? 'var(--red)' : 'var(--green)'}">
                 ${mv.tipo === 'retiro' ? '-' : '+'}${fmt(mv.monto)}
               </span>
+              <button class="btn btn-outline btn-sm" onclick="abrirEditarMovAhorro('${mv.id}')" style="padding:2px 7px;font-size:11px">✏️</button>
+              <button class="btn btn-danger btn-sm" onclick="eliminarMovAhorro('${mv.id}')" style="padding:2px 7px;font-size:11px">✕</button>
             </div>
           </div>`).join('')}
       </div>` : ''}
