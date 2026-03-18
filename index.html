@@ -2684,6 +2684,8 @@ function guardarEditMovAhorro() {
   renderAhorro(); renderDashboard();
   toast('Movimiento actualizado ✓');
 }
+
+function eliminarAhorroLibre(id) {
   if (!confirm('¿Eliminar este ahorro libre?')) return;
   state.ahorrosLibres = (state.ahorrosLibres||[]).filter(a => a.id !== id);
   state.movAhorro = (state.movAhorro||[]).filter(m => m.metaId !== id);
