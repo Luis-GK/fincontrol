@@ -1966,10 +1966,11 @@ function renderDebito() {
     tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">◎</div><p>Sin movimientos registrados</p></div></td></tr>';
     return;
   }
+  // Calcular saldo acumulado cronológicamente primero
   let runSaldo = 0;
   const filas = state.movDebito.map((m, i) => {
     runSaldo += m.tipo === 'deposito' ? m.monto : -m.monto;
-    return `<tr>
+    return { html: `<tr>
       <td>${m.fecha}</td>
       <td>${m.desc}</td>
       <td><span class="badge ${m.tipo === 'deposito' ? 'badge-green' : 'badge-red'}">${m.tipo}</span></td>
@@ -1978,9 +1979,10 @@ function renderDebito() {
       </td>
       <td style="font-family:'Space Mono',monospace;font-size:12px">${fmt(runSaldo)}</td>
       <td><button class="btn btn-danger btn-sm" onclick="eliminarMovDebito(${i})">✕</button></td>
-    </tr>`;
+    </tr>` };
   });
-  tbody.innerHTML = filas.join('');
+  // Mostrar más recientes primero
+  tbody.innerHTML = filas.reverse().map(f => f.html).join('');
 }
 
 // ── Si la fecha cae en sábado o domingo, la mueve al viernes anterior
