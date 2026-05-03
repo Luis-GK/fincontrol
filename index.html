@@ -2195,9 +2195,9 @@ function renderCredito() {
       <td><span class="badge ${tipoBadge}">${tipoLabel}</span></td>
       <td style="font-family:'Space Mono',monospace;font-size:12px;color:var(--text2)">${fmt(c.total)}</td>
       <td style="font-family:'Space Mono',monospace;font-size:12px">${c.tipo==='contado'?fmt(c.total):fmt(cuota)}</td>
-      <td style="color:var(--green);font-weight:700">${c.tipo==='contado'?fmt(c.pagado||0):fmt(pagadoMostrar)}</td>
+      <td style="color:var(--green);font-weight:700">${c.tipo==='contado' ? fmt(c.pagado||0) : fmt(pagadoMostrar)}</td>
       <td style="font-size:12px;color:var(--text2)">${c.tipo==='contado'?'—':`${cargoDelMes}/${c.meses}`}</td>
-      <td style="color:var(--red);font-weight:700">${c.tipo==='contado'?'—':fmt(restante)}</td>
+      <td style="color:var(--red);font-weight:700">${c.tipo==='contado' ? (calcRestanteCargo(c) > 0 ? fmt(calcRestanteCargo(c)) : '<span style="color:var(--green)">✓ Pagado</span>') : fmt(restante)}</td>
       <td><button class="btn btn-danger btn-sm" onclick="eliminarCargo(${i})">✕</button></td>
     </tr>`;
   }).join('');
@@ -2425,11 +2425,12 @@ function registrarPagoTarjeta() {
     let restoPago = monto;
     cargosTarjeta
       .filter(c => c.tipo === 'contado' && calcRestanteCargo(c) > 0)
+      .sort((a,b) => new Date(a.fecha) - new Date(b.fecha)) // más antiguos primero
       .forEach(c => {
         if (restoPago <= 0) return;
         const aplicar = Math.min(restoPago, calcRestanteCargo(c));
-        c.pagado = (c.pagado||0) + aplicar;
-        restoPago -= aplicar;
+        c.pagado = Math.round(((c.pagado||0) + aplicar) * 100) / 100;
+        restoPago = Math.round((restoPago - aplicar) * 100) / 100;
       });
 
   } else if (tipoPago === 'abono-msi') {
