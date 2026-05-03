@@ -2204,13 +2204,10 @@ function renderCredito() {
 
   // Fila de totales
   const totalPagado   = state.cargos.reduce((s,c) => s + (c.pagado||0), 0);
-  const totalRestante = state.cargos.reduce((s,c) => {
-    if (c.tipo === 'contado') return s;
-    return s + calcRestanteCargo(c);
-  }, 0);
-  const totalCuotas = state.cargos.reduce((s,c) => {
-    if (c.tipo === 'contado') return s + c.total;
-    return s + Math.round((c.total / c.meses)*100)/100;
+  const totalRestante = state.cargos.reduce((s,c) => s + calcRestanteCargo(c), 0);
+  const totalCuotas   = state.cargos.reduce((s,c) => {
+    if (c.tipo === 'contado') return s + calcRestanteCargo(c); // contado: lo que falta pagar
+    return s + Math.round((c.total / c.meses)*100)/100;        // MSI/MCI: cuota mensual
   }, 0);
   tbody.innerHTML += `<tr style="border-top:2px solid var(--border);background:var(--bg2)">
     <td colspan="5" style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--text2);padding:10px 12px">TOTAL</td>
@@ -3930,7 +3927,8 @@ function guardadoInmediato() {
   localStorage.setItem('fincontrol_state', JSON.stringify(state));
   if (!accessToken) return;
   clearTimeout(_syncTimeout);
-  if (_isSaving) return;
+  // Forzar guardado aunque haya otro en proceso
+  _isSaving = false;
   _isSaving = true;
   saveToSheet().finally(() => { _isSaving = false; });
 }
